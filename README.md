@@ -1,2 +1,546 @@
-# influencer_calendar
-Influencer &amp; Paid Partnerships Calendar
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Influencer Posting Calendar — Aug–Dec 2026</title>
+<style>
+  :root {
+    --bg: #f8f7f5;
+    --surface: #ffffff;
+    --border: #e5e2dd;
+    --text: #1a1814;
+    --text-muted: #7a7570;
+    --accent: #7c5cbf;
+    --accent-light: #ede9f7;
+    --today-bg: #fff8e7;
+    --today-border: #f5c842;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+  header > div:first-child span { color: var(--text-muted); font-size: 0.83rem; }
+  .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sync-status { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--text-muted); }
+  .sync-spinner { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: none; flex-shrink: 0; }
+  .sync-spinner.active { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .setup-banner { background: #fff8e7; border-bottom: 2px solid #f5c842; padding: 12px 28px; font-size: 0.85rem; display: none; }
+  .setup-banner.visible { display: block; }
+  .setup-banner code { background: rgba(0,0,0,0.07); padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 0.82rem; }
+  .loading-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 500; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+  .loading-overlay.hidden { display: none; }
+  .loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .loading-text { font-size: 0.88rem; color: var(--text-muted); font-weight: 500; }
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 18px; border-radius: 10px; font-size: 0.84rem; font-weight: 600; max-width: 380px; z-index: 1000; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; pointer-events: none; }
+  .toast.visible { transform: none; opacity: 1; }
+  .toast-error { background: #fee2e2; color: #b91c1c; }
+  .toast-success { background: #d1fae5; color: #065f46; }
+  .toast-info { background: var(--accent-light); color: var(--accent); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 0.83rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #6b4eaa; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #f3f1ee; }
+  .btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+  .btn-danger:hover { background: #fecaca; }
+  .filter-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 28px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .filter-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 0.76rem; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+  .chip.active { border-color: currentColor; }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .stats-bar { display: flex; gap: 24px; padding: 13px 28px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-value { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+  .stat-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 500; }
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .view-btn { padding: 6px 12px; font-size: 0.78rem; font-weight: 600; border: none; background: var(--surface); cursor: pointer; color: var(--text-muted); transition: all 0.15s; }
+  .view-btn.active { background: var(--accent); color: #fff; }
+  main { padding: 22px 28px; max-width: 1800px; margin: 0 auto; }
+  .months-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 1200px) { .months-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 700px) { .months-grid { grid-template-columns: 1fr; } }
+  .month-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+  .month-header { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .month-header h2 { font-size: 0.95rem; font-weight: 700; }
+  .month-header .post-count { font-size: 0.75rem; color: var(--text-muted); background: var(--bg); padding: 3px 9px; border-radius: 20px; }
+  .calendar-grid { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .day-header { padding: 7px 4px; text-align: center; font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .day-header:last-child { border-right: none; }
+  .day-cell { min-height: 78px; padding: 5px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; position: relative; }
+  .day-cell:hover { background: #f5f4f1; }
+  .day-cell:nth-child(5n) { border-right: none; }
+  .day-cell.empty { background: #fafaf9; cursor: default; }
+  .day-cell.today { background: var(--today-bg); }
+  .day-cell.today .day-num { background: var(--today-border); color: #1a1814; }
+  .day-num { display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border-radius: 50%; font-size: 0.73rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; }
+  .post-pill { display: flex; align-items: center; gap: 3px; padding: 2px 5px; border-radius: 4px; font-size: 0.66rem; font-weight: 600; margin-bottom: 2px; cursor: pointer; transition: opacity 0.15s; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .post-pill:hover { opacity: 0.72; }
+  .post-pill .platform-icon { flex-shrink: 0; font-size: 0.72rem; }
+  .more-posts { font-size: 0.63rem; color: var(--text-muted); font-weight: 600; padding: 1px 3px; cursor: pointer; }
+  .list-view { display: none; }
+  .list-view.visible { display: block; }
+  .list-month { margin-bottom: 26px; }
+  .list-month-title { font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--border); }
+  .list-post-row { display: grid; grid-template-columns: 70px 1fr 130px 150px 140px auto; gap: 12px; align-items: center; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; cursor: pointer; transition: border-color 0.15s; }
+  .list-post-row:hover { border-color: var(--accent); }
+  .list-date { font-size: 0.76rem; font-weight: 700; color: var(--text-muted); }
+  .list-title { font-size: 0.84rem; font-weight: 600; }
+  .list-sub { font-size: 0.75rem; color: var(--text-muted); }
+  .list-platform { font-size: 0.73rem; display: flex; flex-wrap: wrap; gap: 3px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 14px; width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modalIn 0.18s ease; }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+  .modal-header { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 10; }
+  .modal-header h3 { font-size: 0.98rem; font-weight: 700; }
+  .modal-close { width: 27px; height: 27px; border-radius: 6px; border: none; background: var(--bg); cursor: pointer; font-size: 1rem; color: var(--text-muted); display: flex; align-items: center; justify-content: center; }
+  .modal-close:hover { background: var(--border); }
+  .modal-body { padding: 18px 22px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 13px; }
+  .form-row.full { grid-template-columns: 1fr; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-group input, .form-group select, .form-group textarea { padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 0.86rem; color: var(--text); font-family: inherit; background: var(--surface); transition: border-color 0.15s; outline: none; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .form-group textarea { resize: vertical; min-height: 68px; }
+  .ms-wrap { position: relative; }
+  .ms-trigger { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 0.86rem; color: var(--text); font-family: inherit; background: var(--surface); cursor: pointer; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 6px; transition: border-color 0.15s; outline: none; }
+  .ms-trigger:focus, .ms-trigger.open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .ms-trigger-label { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; min-width: 0; }
+  .ms-tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; background: var(--accent-light); color: var(--accent); border-radius: 4px; font-size: 0.73rem; font-weight: 600; white-space: nowrap; }
+  .ms-tag .rm { cursor: pointer; opacity: 0.6; font-size: 0.85rem; margin-left: 1px; }
+  .ms-tag .rm:hover { opacity: 1; }
+  .ms-placeholder { color: var(--text-muted); font-size: 0.86rem; }
+  .ms-chevron { color: var(--text-muted); flex-shrink: 0; font-size: 0.73rem; }
+  .ms-dropdown { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 300; max-height: 220px; overflow-y: auto; }
+  .ms-dropdown.open { display: block; }
+  .ms-option { display: flex; align-items: center; gap: 9px; padding: 8px 13px; cursor: pointer; font-size: 0.84rem; font-weight: 500; transition: background 0.1s; }
+  .ms-option:hover { background: var(--bg); }
+  .ms-option.selected { background: var(--accent-light); font-weight: 700; }
+  .ms-option input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; padding: 0; border: none; box-shadow: none; }
+  .color-picker-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .color-swatch { width: 23px; height: 23px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: all 0.1s; }
+  .color-swatch.selected { border-color: var(--text); transform: scale(1.15); }
+  .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 10px; position: sticky; bottom: 0; background: var(--surface); }
+  .influencer-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+  .calendar-view { display: block; }
+  .calendar-view.hidden { display: none; }
+  .no-posts { text-align: center; padding: 38px 20px; color: var(--text-muted); font-size: 0.84rem; }
+</style>
+</head>
+<body>
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Loading from Google Sheets…</div>
+</div>
+<div id="toast" class="toast"></div>
+<header>
+  <div>
+    <h1>Influencer &amp; Partner Posting Calendar</h1>
+    <span>August through December 2026</span>
+  </div>
+  <div class="header-actions">
+    <div class="sync-status">
+      <div class="sync-spinner" id="syncSpinner"></div>
+      <span id="syncText"></span>
+    </div>
+    <button class="btn btn-secondary" style="padding:7px 10px;font-size:1rem" onclick="loadPosts()" title="Refresh">↻</button>
+    <div class="view-toggle">
+      <button class="view-btn active" onclick="setView('calendar')">📅 Calendar</button>
+      <button class="view-btn" onclick="setView('list')">☰ List</button>
+    </div>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add Post</button>
+  </div>
+</header>
+<div id="setupBanner" class="setup-banner">
+  ⚠️ <strong>Setup required:</strong> Open this file in a text editor and replace <code>PASTE_YOUR_APPS_SCRIPT_URL_HERE</code> with your Google Apps Script URL. See <strong>setup-guide.md</strong> for instructions.
+</div>
+<div class="stats-bar" id="statsBar"></div>
+<div class="filter-bar">
+  <span class="filter-label">Filter:</span>
+  <div class="filter-chips" id="filterChips">
+    <div class="chip active" style="color:#7c5cbf;background:#ede9f7" onclick="toggleFilter('all')">
+      <span class="dot"></span> All
+    </div>
+  </div>
+</div>
+<main>
+  <div class="calendar-view" id="calendarView">
+    <div class="months-grid" id="monthsGrid"></div>
+  </div>
+  <div class="list-view" id="listView"></div>
+</main>
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Add Post</h3>
+      <button class="modal-close" onclick="closeModal('addModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date *</label>
+          <input type="date" id="postDate" min="2026-08-01" max="2026-12-31">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="postStatus">
+            <option value="Planned">🗓 Planned</option>
+            <option value="Brief Sent">📤 Brief Sent</option>
+            <option value="In Review">👀 In Review</option>
+            <option value="Approved">✅ Approved</option>
+            <option value="Live">🟢 Live</option>
+            <option value="Complete">🏁 Complete</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-group">
+          <label>Platforms *</label>
+          <div class="ms-wrap" id="platformWrap">
+            <button type="button" class="ms-trigger" id="platformTrigger" onclick="toggleDropdown('platform',event)">
+              <span class="ms-trigger-label" id="platformLabel"><span class="ms-placeholder">Select platforms…</span></span>
+              <span class="ms-chevron">▾</span>
+            </button>
+            <div class="ms-dropdown" id="platformDropdown"></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-group">
+          <label>Post Type</label>
+          <div class="ms-wrap" id="typeWrap">
+            <button type="button" class="ms-trigger" id="typeTrigger" onclick="toggleDropdown('type',event)">
+              <span class="ms-trigger-label" id="typeLabel"><span class="ms-placeholder">Select post types…</span></span>
+              <span class="ms-chevron">▾</span>
+            </button>
+            <div class="ms-dropdown" id="typeDropdown"></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Influencer / Partner Name *</label>
+          <input type="text" id="postInfluencer" placeholder="e.g. @handle or Company" list="influencerSuggestions">
+          <datalist id="influencerSuggestions"></datalist>
+        </div>
+        <div class="form-group">
+          <label>Color Label</label>
+          <div class="color-picker-row" id="colorPicker"></div>
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-group">
+          <label>Post Title / Topic *</label>
+          <input type="text" id="postTitle" placeholder="Brief description of the post">
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-group">
+          <label>Notes / Brief</label>
+          <textarea id="postNotes" placeholder="Key messaging, hashtags, links, deliverables…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="deleteBtn" onclick="deleteCurrentPost()" style="display:none">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn btn-secondary" onclick="closeModal('addModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="savePost()">Save Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby-K4snEnkdMp6objKzxp2gmDfDcxVVW4fQYKUHKGaSrsbJzSRFZPursqzqO5-0YA5-/exec';
+const COLORS = [
+  {hex:'#7c5cbf',name:'Purple'},{hex:'#e85d7a',name:'Rose'},{hex:'#2eaaf0',name:'Blue'},
+  {hex:'#1db88e',name:'Teal'},{hex:'#f5a623',name:'Orange'},{hex:'#e05252',name:'Red'},
+  {hex:'#5f9b3c',name:'Green'},{hex:'#7b5ea7',name:'Indigo'},{hex:'#e07b3c',name:'Burnt'},{hex:'#3c8fe0',name:'Sky'}
+];
+const MONTHS = [
+  {name:'August',month:7,year:2026},{name:'September',month:8,year:2026},
+  {name:'October',month:9,year:2026},{name:'November',month:10,year:2026},{name:'December',month:11,year:2026}
+];
+const PLATFORMS = [
+  {value:'Instagram',icon:'📸'},{value:'TikTok',icon:'🎵'},{value:'YouTube',icon:'▶️'},
+  {value:'X / Twitter',icon:'🐦'},{value:'LinkedIn',icon:'💼'},{value:'Facebook',icon:'👥'},
+  {value:'Pinterest',icon:'📌'},{value:'Blog',icon:'✍️'},{value:'Podcast',icon:'🎤'},
+  {value:'Email',icon:'📧'},{value:'Other',icon:'🔗'}
+];
+const POST_TYPES = ['Feed Post','Story / Reel','Video','Live','Newsletter','Article','Event','Collab','Takeover','Giveaway'];
+const PLATFORM_ICON = Object.fromEntries(PLATFORMS.map(p=>[p.value,p.icon]));
+const STATUS_COLORS = {'Planned':'#94a3b8','Brief Sent':'#60a5fa','In Review':'#f59e0b','Approved':'#10b981','Live':'#22c55e','Complete':'#6366f1'};
+let posts=[],isSyncing=false,lastSynced=null,activeFilters=new Set(['all']),currentEditId=null,selectedColor=COLORS[0].hex,currentView='calendar',selectedPlatforms=[],selectedTypes=[];
+function normalizeDate(raw){
+  if(!raw)return'';
+  var s=String(raw);
+  // Already YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  // Parse whatever Sheets returns (e.g. full Date string) using UTC to avoid timezone shift
+  var d=new Date(s);
+  if(isNaN(d.getTime()))return s;
+  var y=d.getUTCFullYear(),m=String(d.getUTCMonth()+1).padStart(2,'0'),day=String(d.getUTCDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function migratePost(p){return{...p,date:normalizeDate(p.date),platforms:Array.isArray(p.platforms)?p.platforms:(p.platform?[p.platform]:[]),types:Array.isArray(p.types)?p.types:(p.type?[p.type]:[])};}
+async function loadPosts(silent){
+  if(!silent){document.getElementById('loadingOverlay').classList.remove('hidden');}
+  setSyncing(true);
+  try{
+    const res=await fetch(APPS_SCRIPT_URL);
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    posts=(data.posts||[]).map(migratePost);
+    lastSynced=new Date();updateSyncStatus();renderAll();
+    return true;
+  }catch(err){
+    if(!silent)showToast('Could not connect to Google Sheets. Check your Apps Script URL.','error');
+    return false;
+  }
+  finally{setSyncing(false);if(!silent)document.getElementById('loadingOverlay').classList.add('hidden');}
+}
+async function pushPost(post){
+  try{
+    const res=await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},redirect:'follow',body:JSON.stringify({action:'save',post})});
+    lastSynced=new Date();updateSyncStatus();
+    return true;
+  }catch(err){
+    showToast('Could not sync to Google Sheets — post saved locally only.','error');
+    return false;
+  }
+}
+async function pushDelete(id){
+  try{
+    await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},redirect:'follow',body:JSON.stringify({action:'delete',id})});
+    lastSynced=new Date();updateSyncStatus();
+  }catch(err){showToast('Deleted locally but could not sync to Google Sheets.','error');}
+}
+function setSyncing(v){isSyncing=v;document.getElementById('syncSpinner').classList.toggle('active',v);updateSyncStatus();}
+function updateSyncStatus(){
+  const el=document.getElementById('syncText');
+  if(isSyncing){el.textContent='Syncing…';return;}
+  if(!lastSynced){el.textContent='';return;}
+  const secs=Math.floor((new Date()-lastSynced)/1000);
+  if(secs<8)el.textContent='Synced';else if(secs<60)el.textContent='Synced '+secs+'s ago';else el.textContent='Synced '+Math.floor(secs/60)+'m ago';
+}
+function showToast(msg,type){type=type||'info';var t=document.getElementById('toast');t.textContent=msg;t.className='toast toast-'+type+' visible';setTimeout(function(){t.classList.remove('visible');},4500);}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+var MS_CONFIG={
+  platform:{items:PLATFORMS.map(function(p){return{value:p.value,icon:p.icon};}),placeholder:'Select platforms…'},
+  type:{items:POST_TYPES.map(function(v){return{value:v};}),placeholder:'Select post types…'}
+};
+function getSelected(key){return key==='platform'?selectedPlatforms:selectedTypes;}
+function buildDropdown(key){
+  var selected=getSelected(key),items=MS_CONFIG[key].items,dd=document.getElementById(key+'Dropdown');
+  dd.innerHTML='';
+  items.forEach(function(item){
+    var value=item.value,icon=item.icon||'',isSelected=selected.indexOf(value)>-1;
+    var opt=document.createElement('div');opt.className='ms-option'+(isSelected?' selected':'');
+    var safeVal=value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    opt.innerHTML='<input type="checkbox"'+(isSelected?' checked':'')+' onclick="handleCheck(event,\''+key+'\',\''+safeVal+'\')">'+(icon?'<span style="font-size:1rem">'+icon+'</span>':'')+'<span>'+value+'</span>';
+    opt.addEventListener('click',function(e){if(e.target.tagName!=='INPUT')toggleOption(key,value);});
+    dd.appendChild(opt);
+  });
+}
+function toggleOption(key,value){var arr=getSelected(key),idx=arr.indexOf(value);if(idx>-1)arr.splice(idx,1);else arr.push(value);buildDropdown(key);updateTriggerLabel(key);}
+function handleCheck(e,key,value){e.stopPropagation();toggleOption(key,value);}
+function toggleDropdown(key,e){
+  e.stopPropagation();
+  var dd=document.getElementById(key+'Dropdown'),trigger=document.getElementById(key+'Trigger'),isOpen=dd.classList.contains('open');
+  var other=key==='platform'?'type':'platform';
+  document.getElementById(other+'Dropdown').classList.remove('open');document.getElementById(other+'Trigger').classList.remove('open');
+  dd.classList.toggle('open',!isOpen);trigger.classList.toggle('open',!isOpen);
+}
+function closeDropdown(key){document.getElementById(key+'Dropdown').classList.remove('open');document.getElementById(key+'Trigger').classList.remove('open');}
+function updateTriggerLabel(key){
+  var selected=getSelected(key),placeholder=MS_CONFIG[key].placeholder,label=document.getElementById(key+'Label');
+  if(selected.length===0){label.innerHTML='<span class="ms-placeholder">'+placeholder+'</span>';}
+  else{label.innerHTML=selected.map(function(v){var icon=(key==='platform'&&PLATFORM_ICON[v])?PLATFORM_ICON[v]+' ':'';var safeV=v.replace(/\\/g,'\\\\').replace(/'/g,"\\'");return'<span class="ms-tag">'+icon+v+'<span class="rm" onclick="removeTag(event,\''+key+'\',\''+safeV+'\')">x</span></span>';}).join('');}
+}
+function removeTag(e,key,value){e.stopPropagation();var arr=getSelected(key),idx=arr.indexOf(value);if(idx>-1)arr.splice(idx,1);buildDropdown(key);updateTriggerLabel(key);}
+document.addEventListener('click',function(e){['platform','type'].forEach(function(key){var wrap=document.getElementById(key+'Wrap');if(wrap&&!wrap.contains(e.target))closeDropdown(key);});});
+function getFilteredPosts(){if(activeFilters.has('all'))return posts;return posts.filter(function(p){return activeFilters.has(p.influencer);});}
+function toggleFilter(val){if(val==='all'){activeFilters=new Set(['all']);}else{activeFilters.delete('all');if(activeFilters.has(val)){activeFilters.delete(val);if(activeFilters.size===0)activeFilters.add('all');}else{activeFilters.add(val);}}renderAll();}
+function renderAll(){renderStats();renderFilterChips();renderCalendar();renderListView();updateInfluencerSuggestions();}
+function getPlatformsArr(post){if(Array.isArray(post.platforms)&&post.platforms.length)return post.platforms;if(post.platform)return[post.platform];return[];}
+function getTypesArr(post){if(Array.isArray(post.types)&&post.types.length)return post.types;if(post.type)return[post.type];return[];}
+function renderStats(){
+  var f=getFilteredPosts(),influencers=new Set(f.map(function(p){return p.influencer;}));
+  var live=f.filter(function(p){return p.status==='Live'||p.status==='Complete';}).length;
+  var ig=f.filter(function(p){return getPlatformsArr(p).indexOf('Instagram')>-1;}).length;
+  var tt=f.filter(function(p){return getPlatformsArr(p).indexOf('TikTok')>-1;}).length;
+  var yt=f.filter(function(p){return getPlatformsArr(p).indexOf('YouTube')>-1;}).length;
+  var li=f.filter(function(p){return getPlatformsArr(p).indexOf('LinkedIn')>-1;}).length;
+  document.getElementById('statsBar').innerHTML='<div class="stat"><div class="stat-value">'+f.length+'</div><div class="stat-label">Total Posts</div></div>'+'<div class="stat"><div class="stat-value">'+influencers.size+'</div><div class="stat-label">Influencers / Partners</div></div>'+'<div class="stat"><div class="stat-value">'+live+'</div><div class="stat-label">Live / Complete</div></div>'+'<div class="stat"><div class="stat-value">'+ig+'</div><div class="stat-label">Instagram</div></div>'+'<div class="stat"><div class="stat-value">'+tt+'</div><div class="stat-label">TikTok</div></div>'+'<div class="stat"><div class="stat-value">'+yt+'</div><div class="stat-label">YouTube</div></div>'+'<div class="stat"><div class="stat-value">'+li+'</div><div class="stat-label">LinkedIn</div></div>';
+}
+function getColorMap(){var map={};posts.forEach(function(p){if(!map[p.influencer])map[p.influencer]=p.color||COLORS[0].hex;});return map;}
+function renderFilterChips(){
+  var names=[],seen={};posts.forEach(function(p){if(!seen[p.influencer]){seen[p.influencer]=true;names.push(p.influencer);}});names.sort();
+  var colorMap=getColorMap(),chips=document.getElementById('filterChips');chips.innerHTML='';
+  var allChip=document.createElement('div');allChip.className='chip'+(activeFilters.has('all')?' active':'');allChip.style.cssText='color:#7c5cbf;background:#ede9f7';allChip.innerHTML='<span class="dot"></span> All';allChip.onclick=function(){toggleFilter('all');};chips.appendChild(allChip);
+  names.forEach(function(name){var color=colorMap[name]||'#7c5cbf';var chip=document.createElement('div');chip.className='chip'+(activeFilters.has(name)?' active':'');chip.style.cssText='color:'+color+';background:'+rgba(color,0.12);chip.innerHTML='<span class="dot"></span> '+name;chip.onclick=function(){toggleFilter(name);};chips.appendChild(chip);});
+}
+var _dayModalDate='';
+function openDayModal(dateStr,dayPosts){
+  _dayModalDate=dateStr;
+  var d=new Date(dateStr+'T00:00:00');
+  var label=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  document.getElementById('dayModalTitle').textContent=label;
+  var body=document.getElementById('dayModalBody');
+  body.innerHTML='';
+  dayPosts.forEach(function(post){
+    var pArr=getPlatformsArr(post);
+    var icons=pArr.slice(0,2).map(function(v){return(PLATFORM_ICON[v]||'🔗')+' '+v;}).join(', ');
+    var row=document.createElement('div');
+    row.style.cssText='padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:10px;align-items:flex-start';
+    row.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+post.color+';margin-top:5px;flex-shrink:0"></div>'+
+      '<div style="flex:1"><div style="font-size:0.86rem;font-weight:600">'+post.title+'</div>'+
+      '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px">'+post.influencer+' · '+icons+'</div>'+
+      (post.notes?'<div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px">'+post.notes.slice(0,80)+(post.notes.length>80?'…':'')+'</div>':'')+'</div>'+
+      '<span style="font-size:0.7rem;font-weight:700;color:'+(STATUS_COLORS[post.status]||'#94a3b8')+'">'+( post.status||'Planned')+'</span>';
+    row.onclick=function(){closeModal('dayModal');openEditModal(post.id);};
+    body.appendChild(row);
+  });
+  document.getElementById('dayModal').classList.add('open');
+}
+function openAddFromDay(){closeModal('dayModal');openAddModal(_dayModalDate);}
+document.addEventListener('DOMContentLoaded',function(){
+  document.getElementById('dayModal').addEventListener('click',function(e){if(e.target===this)closeModal('dayModal');});
+});
+function renderCalendar(){
+  var grid=document.getElementById('monthsGrid');grid.innerHTML='';var filtered=getFilteredPosts();
+  MONTHS.forEach(function(mo){
+    var mp=filtered.filter(function(p){var d=new Date(p.date+'T00:00:00');return d.getMonth()===mo.month&&d.getFullYear()===mo.year;});
+    var card=document.createElement('div');card.className='month-card';
+    card.innerHTML='<div class="month-header"><h2>'+mo.name+' '+mo.year+'</h2><span class="post-count">'+mp.length+' post'+(mp.length!==1?'s':'')+'</span></div>';
+    var cal=document.createElement('div');cal.className='calendar-grid';
+    ['Mon','Tue','Wed','Thu','Fri'].forEach(function(d){var dh=document.createElement('div');dh.className='day-header';dh.textContent=d;cal.appendChild(dh);});
+    // firstDay: Mon=0...Fri=4, skip Sat/Sun entirely
+    var firstDow=new Date(mo.year,mo.month,1).getDay(); // 0=Sun
+    var firstOffset=(firstDow===0)?4:(firstDow-1); // Mon-based offset, Sun wraps to end of prev week
+    // find first Monday on or before the 1st
+    for(var i=0;i<firstOffset;i++){var b=document.createElement('div');b.className='day-cell empty';cal.appendChild(b);}
+    var today=new Date(),days=new Date(mo.year,mo.month+1,0).getDate();
+    for(var d=1;d<=days;d++){(function(day){
+      var dow=new Date(mo.year,mo.month,day).getDay();
+      if(dow===0||dow===6)return; // skip weekends
+      var cell=document.createElement('div');cell.className='day-cell';
+      var isToday=today.getFullYear()===mo.year&&today.getMonth()===mo.month&&today.getDate()===day;
+      if(isToday)cell.classList.add('today');
+      var pad=function(n){return String(n).padStart(2,'0');};
+      var dateStr=mo.year+'-'+pad(mo.month+1)+'-'+pad(day);
+      var dayPosts=mp.filter(function(p){return p.date===dateStr;});
+      var num=document.createElement('div');num.className='day-num';num.textContent=day;cell.appendChild(num);
+      dayPosts.slice(0,3).forEach(function(post){
+        var pArr=getPlatformsArr(post),icons=pArr.slice(0,2).map(function(v){return PLATFORM_ICON[v]||'🔗';}).join('');
+        var pill=document.createElement('div');pill.className='post-pill';
+        pill.style.cssText='background:'+rgba(post.color,0.15)+';color:'+post.color;
+        pill.title=post.influencer+' — '+post.title+'\n'+pArr.join(', ');
+        pill.innerHTML='<span class="platform-icon">'+icons+'</span><span style="overflow:hidden;text-overflow:ellipsis">'+post.influencer+'</span>';
+        pill.onclick=function(e){e.stopPropagation();openEditModal(post.id);};
+        cell.appendChild(pill);
+      });
+      if(dayPosts.length>3){
+        var more=document.createElement('div');more.className='more-posts';
+        more.textContent='+'+(dayPosts.length-3)+' more';
+        more.onclick=function(e){e.stopPropagation();openDayModal(dateStr,dayPosts);};
+        cell.appendChild(more);
+      }
+      cell.onclick=function(){openAddModal(dateStr);};cal.appendChild(cell);
+    })(d);}
+    card.appendChild(cal);grid.appendChild(card);
+  });
+}
+function renderListView(){
+  var container=document.getElementById('listView');container.innerHTML='';var filtered=getFilteredPosts();
+  if(filtered.length===0){container.innerHTML='<div class="no-posts">No posts yet. Click “+ Add Post” to get started.</div>';return;}
+  MONTHS.forEach(function(mo){
+    var mp=filtered.filter(function(p){var d=new Date(p.date+'T00:00:00');return d.getMonth()===mo.month&&d.getFullYear()===mo.year;}).sort(function(a,b){return a.date.localeCompare(b.date);});
+    if(!mp.length)return;
+    var sec=document.createElement('div');sec.className='list-month';sec.innerHTML='<div class="list-month-title">'+mo.name+' '+mo.year+' — '+mp.length+' post'+(mp.length!==1?'s':'')+'</div>';
+    mp.forEach(function(post){
+      var d=new Date(post.date+'T00:00:00'),pArr=getPlatformsArr(post),tArr=getTypesArr(post);
+      var plHtml=pArr.map(function(v){return'<span style="white-space:nowrap">'+(PLATFORM_ICON[v]||'🔗')+' '+v+'</span>';}).join('');
+      var tyHtml=tArr.map(function(v){return'<span style="white-space:nowrap;background:#f3f1ee;padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:600">'+v+'</span>';}).join('');
+      var row=document.createElement('div');row.className='list-post-row';
+      var dateLabel=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      row.innerHTML='<div class="list-date">'+dateLabel+'</div><div><div class="list-title">'+post.title+'</div><div class="list-sub">'+(post.notes?post.notes.slice(0,55)+(post.notes.length>55?'…':''):'')+'</div></div><div><span class="influencer-badge" style="background:'+rgba(post.color,0.14)+';color:'+post.color+'">'+post.influencer+'</span></div><div class="list-platform">'+(plHtml||'—')+'</div><div style="display:flex;flex-wrap:wrap;gap:3px">'+(tyHtml||'—')+'</div><div><span style="font-size:0.7rem;font-weight:700;color:'+(STATUS_COLORS[post.status]||'#94a3b8')+'">'+( post.status||'Planned')+'</span></div>';
+      row.onclick=function(){openEditModal(post.id);};sec.appendChild(row);
+    });
+    container.appendChild(sec);
+  });
+}
+function updateInfluencerSuggestions(){var dl=document.getElementById('influencerSuggestions'),seen={},names=[];posts.forEach(function(p){if(!seen[p.influencer]){seen[p.influencer]=true;names.push(p.influencer);}});names.sort();dl.innerHTML=names.map(function(n){return'<option value="'+n+'">';}).join('');}
+function renderColorPicker(sel){
+  var cp=document.getElementById('colorPicker');cp.innerHTML='';
+  COLORS.forEach(function(c){var sw=document.createElement('div');sw.className='color-swatch'+(c.hex===sel?' selected':'');sw.style.background=c.hex;sw.title=c.name;sw.onclick=function(){selectedColor=c.hex;document.querySelectorAll('.color-swatch').forEach(function(s){s.classList.remove('selected');});sw.classList.add('selected');};cp.appendChild(sw);});
+}
+function resetDropdowns(){selectedPlatforms.length=0;selectedTypes.length=0;buildDropdown('platform');updateTriggerLabel('platform');buildDropdown('type');updateTriggerLabel('type');}
+function openAddModal(dateStr){
+  currentEditId=null;document.getElementById('modalTitle').textContent='Add Post';document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('postDate').value=dateStr||'';document.getElementById('postInfluencer').value='';document.getElementById('postTitle').value='';document.getElementById('postNotes').value='';document.getElementById('postStatus').value='Planned';
+  selectedColor=COLORS[0].hex;resetDropdowns();renderColorPicker(selectedColor);document.getElementById('addModal').classList.add('open');
+}
+function openEditModal(id){
+  var post=null;for(var i=0;i<posts.length;i++){if(posts[i].id===id){post=posts[i];break;}}if(!post)return;
+  currentEditId=id;document.getElementById('modalTitle').textContent='Edit Post';document.getElementById('deleteBtn').style.display='inline-flex';
+  document.getElementById('postDate').value=post.date;document.getElementById('postInfluencer').value=post.influencer;document.getElementById('postTitle').value=post.title;document.getElementById('postNotes').value=post.notes||'';document.getElementById('postStatus').value=post.status||'Planned';
+  selectedColor=post.color||COLORS[0].hex;
+  selectedPlatforms.length=0;getPlatformsArr(post).forEach(function(v){selectedPlatforms.push(v);});
+  selectedTypes.length=0;getTypesArr(post).forEach(function(v){selectedTypes.push(v);});
+  buildDropdown('platform');updateTriggerLabel('platform');buildDropdown('type');updateTriggerLabel('type');renderColorPicker(selectedColor);document.getElementById('addModal').classList.add('open');
+}
+function closeModal(id){document.getElementById(id).classList.remove('open');closeDropdown('platform');closeDropdown('type');}
+async function savePost(){
+  var date=document.getElementById('postDate').value,influencer=document.getElementById('postInfluencer').value.trim(),title=document.getElementById('postTitle').value.trim(),notes=document.getElementById('postNotes').value.trim(),status=document.getElementById('postStatus').value,platforms=selectedPlatforms.slice(),types=selectedTypes.slice();
+  if(!date||!influencer||!title){alert('Please fill in Date, Influencer/Partner Name, and Post Title.');return;}
+  if(platforms.length===0){alert('Please select at least one platform.');return;}
+  var existingPost=null;for(var i=0;i<posts.length;i++){if(posts[i].influencer===influencer&&posts[i].id!==currentEditId){existingPost=posts[i];break;}}
+  var color=existingPost?existingPost.color:selectedColor,id=currentEditId||uid();
+  var postObj={id:id,date:date,influencer:influencer,title:title,platforms:platforms,types:types,notes:notes,status:status,color:color};
+  if(currentEditId){var idx=-1;for(var j=0;j<posts.length;j++){if(posts[j].id===currentEditId){idx=j;break;}}if(idx>=0)posts[idx]=postObj;else posts.push(postObj);}else{posts.push(postObj);}
+  closeModal('addModal');renderAll();
+  setSyncing(true);
+  var saved=await pushPost(postObj);
+  if(saved){
+    var ok=await loadPosts(true);
+    if(ok&&!posts.find(function(p){return p.id===postObj.id;})){
+      posts.push(postObj);renderAll();
+      showToast('Saved but not confirmed in Sheets yet — try refreshing.','info');
+    }
+  }
+  setSyncing(false);
+}
+async function deleteCurrentPost(){
+  if(!currentEditId)return;if(!confirm('Delete this post?'))return;
+  var id=currentEditId;posts=posts.filter(function(p){return p.id!==id;});closeModal('addModal');renderAll();
+  setSyncing(true);await pushDelete(id);await loadPosts(true);setSyncing(false);
+}
+function setView(v){currentView=v;document.getElementById('calendarView').classList.toggle('hidden',v!=='calendar');document.getElementById('listView').classList.toggle('visible',v==='list');document.querySelectorAll('.view-btn').forEach(function(btn,i){btn.classList.toggle('active',(i===0&&v==='calendar')||(i===1&&v==='list'));});}
+function rgba(hex,alpha){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+alpha+')';}
+document.getElementById('addModal').addEventListener('click',function(e){if(e.target===this)closeModal('addModal');});
+buildDropdown('platform');updateTriggerLabel('platform');buildDropdown('type');updateTriggerLabel('type');renderColorPicker(COLORS[0].hex);
+setInterval(updateSyncStatus,10000);
+setInterval(function(){loadPosts(true);},30000);
+loadPosts();
+</script>
+
+<div class="modal-overlay" id="dayModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3 id="dayModalTitle">Posts</h3>
+      <button class="modal-close" onclick="closeModal('dayModal')">✕</button>
+    </div>
+    <div class="modal-body" id="dayModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="dayModalAddBtn" onclick="openAddFromDay()">+ Add Post</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
