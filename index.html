@@ -193,6 +193,7 @@
             <option value="Brief Sent">📤 Brief Sent</option>
             <option value="In Review">👀 In Review</option>
             <option value="Approved">✅ Approved</option>
+            <option value="In Production">🚀 In Production</option>
             <option value="Live">🟢 Live</option>
             <option value="Complete">🏁 Complete</option>
           </select>
@@ -274,7 +275,7 @@ const PLATFORMS = [
 ];
 const POST_TYPES = ['Feed Post','Story / Reel','Video','Live','Newsletter','Article','Event','Collab','Takeover','Giveaway'];
 const PLATFORM_ICON = Object.fromEntries(PLATFORMS.map(p=>[p.value,p.icon]));
-const STATUS_COLORS = {'Planned':'#94a3b8','Brief Sent':'#60a5fa','In Review':'#f59e0b','Approved':'#10b981','Live':'#22c55e','Complete':'#6366f1'};
+const STATUS_COLORS = {'Planned':'#94a3b8','Brief Sent':'#60a5fa','In Review':'#f59e0b','Approved':'#10b981','In Production':'#f97316','Live':'#22c55e','Complete':'#6366f1'};
 let posts=[],isSyncing=false,lastSynced=null,activeFilters=new Set(['all']),currentEditId=null,selectedColor=COLORS[0].hex,currentView='calendar',selectedPlatforms=[],selectedTypes=[];
 function normalizeDate(raw){
   if(!raw)return'';
