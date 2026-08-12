@@ -195,7 +195,7 @@
       <div class="form-row full">
         <div class="form-group">
           <label>Channel *</label>
-          <select id="postChannel" onchange="onChannelChange(this.value)">
+          <select id="postChannel" autocomplete="off" onchange="onChannelChange(this.value)">
             <option value="">Select a channel…</option>
             <option value="Influencer / Creator">🤝 Influencer / Creator</option>
             <option value="Newsletter">📧 Newsletter</option>
@@ -380,13 +380,16 @@
       </div>
 
       <!-- Name / Partner (shown for relevant channels) -->
-      <div id="nameFieldRow" class="form-row" style="display:none">
+      <div id="nameFieldRow" class="form-row full" style="display:none">
         <div class="form-group">
           <label id="nameFieldLabel">Name / Partner *</label>
           <input type="text" id="postInfluencer" placeholder="e.g. @handle or Company" list="influencerSuggestions">
           <datalist id="influencerSuggestions"></datalist>
         </div>
-        <div class="form-group" id="colorFieldInName">
+      </div>
+      <!-- Color label always visible -->
+      <div id="colorRow" class="form-row full" style="display:none">
+        <div class="form-group">
           <label>Color Label</label>
           <div class="color-picker-row" id="colorPicker"></div>
         </div>
@@ -597,11 +600,14 @@ function onChannelChange(channel){
   // Show/hide name row
   var nameRow=document.getElementById('nameFieldRow');
   nameRow.style.display=CHANNELS_WITH_NAME.indexOf(channel)>-1?'':'none';
-  // Auto-set blue for Influencer/Creator if creating new post
+  // Show color picker whenever a channel is selected
+  var colorRow=document.getElementById('colorRow');
+  colorRow.style.display=channel?'':'none';
+  // Auto-set blue for Influencer/Creator on new posts
   if(channel==='Influencer / Creator'&&!currentEditId){
     selectedColor=INFLUENCER_COLOR;
-    renderColorPicker(selectedColor);
   }
+  if(channel){renderColorPicker(selectedColor);}
 }
 
 // ---- Stats / filter ----
@@ -789,7 +795,8 @@ function openAddModal(dateStr){
   document.getElementById('postTitle').value='';
   document.getElementById('postNotes').value='';
   document.getElementById('postStatus').value='Planned';
-  document.getElementById('postChannel').value='';
+  var chSel=document.getElementById('postChannel');chSel.selectedIndex=0;chSel.value='';
+  document.getElementById('colorRow').style.display='none';
   onChannelChange('');
   resetAllDropdowns();
   ['psFunnel','progoFunnel','sponsorshipType','partnershipType','customerStoryFormat'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
