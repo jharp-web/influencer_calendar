@@ -675,7 +675,8 @@ function getPostIcon(post){
   return CHANNEL_ICONS[post.channel]||'📌';
 }
 function getPostLabel(post){
-  return post.title||post.influencer||post.channel;
+  if(post.channel==='Influencer / Creator'||post.channel==='Partnerships')return post.influencer||post.title;
+  return post.title||post.channel;
 }
 function getPostColor(post){
   if(post.channel==='Influencer / Creator')return post.color||INFLUENCER_COLOR;
