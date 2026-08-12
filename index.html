@@ -63,7 +63,7 @@
   .day-cell.today{background:var(--today-bg);}
   .day-cell.today .day-num{background:var(--today-border);color:#1a1814;}
   .day-num{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;font-size:0.73rem;font-weight:600;color:var(--text-muted);margin-bottom:3px;}
-  .post-pill{display:flex;align-items:center;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
   .post-pill:hover{opacity:0.72;}
   .post-pill .ch-icon{flex-shrink:0;font-size:0.72rem;}
   .more-posts{font-size:0.63rem;color:var(--text-muted);font-weight:600;padding:1px 3px;cursor:pointer;}
@@ -387,13 +387,6 @@
           <datalist id="influencerSuggestions"></datalist>
         </div>
       </div>
-      <!-- Color label always visible -->
-      <div id="colorRow" class="form-row full" style="display:none">
-        <div class="form-group">
-          <label>Color Label</label>
-          <div class="color-picker-row" id="colorPicker"></div>
-        </div>
-      </div>
 
       <div class="form-row full">
         <div class="form-group">
@@ -439,7 +432,6 @@ const COLORS=[
   {hex:'#1db88e',name:'Teal'},{hex:'#f5a623',name:'Orange'},{hex:'#e05252',name:'Red'},
   {hex:'#5f9b3c',name:'Green'},{hex:'#7b5ea7',name:'Indigo'},{hex:'#e07b3c',name:'Burnt'},{hex:'#3c8fe0',name:'Sky'}
 ];
-const INFLUENCER_COLOR='#2eaaf0'; // default blue for Influencer/Creator
 const MONTHS=[
   {name:'August',month:7,year:2026},{name:'September',month:8,year:2026},
   {name:'October',month:9,year:2026},{name:'November',month:10,year:2026},{name:'December',month:11,year:2026}
@@ -448,6 +440,11 @@ const CHANNEL_ICONS={
   'Influencer / Creator':'🤝','Newsletter':'📧','Paid Social':'💰',
   'Programmatic':'📊','Sponsorships':'🎙️','Partnerships':'🤝',
   'DOOH':'🏙️','Paid Search':'🔍','Customer Story':'⭐'
+};
+const CHANNEL_COLORS={
+  'Influencer / Creator':'#2eaaf0','Newsletter':'#f5a623','Paid Social':'#7c5cbf',
+  'Programmatic':'#1db88e','Sponsorships':'#e85d7a','Partnerships':'#3c8fe0',
+  'DOOH':'#e07b3c','Paid Search':'#e05252','Customer Story':'#5f9b3c'
 };
 // Channels that show the name/partner field
 const CHANNELS_WITH_NAME=['Influencer / Creator','Sponsorships','Partnerships','Customer Story'];
@@ -467,7 +464,7 @@ var MS_CONFIG={
   progoType:{items:[{value:'Display'},{value:'Native'},{value:'YouTube'},{value:'CTV'}],placeholder:'Display, Native…'}
 };
 
-let posts=[],isSyncing=false,lastSynced=null,activeFilters=new Set(['all']),currentEditId=null,selectedColor=COLORS[0].hex,currentView='calendar';
+let posts=[],isSyncing=false,lastSynced=null,activeFilters=new Set(['all']),currentEditId=null,currentView='calendar';
 var _dayModalDate='';
 
 function normalizeDate(raw){
@@ -607,14 +604,6 @@ function onChannelChange(channel){
   // Show/hide name row
   var nameRow=document.getElementById('nameFieldRow');
   nameRow.style.display=CHANNELS_WITH_NAME.indexOf(channel)>-1?'':'none';
-  // Show color picker whenever a channel is selected
-  var colorRow=document.getElementById('colorRow');
-  colorRow.style.display=channel?'':'none';
-  // Auto-set blue for Influencer/Creator on new posts
-  if(channel==='Influencer / Creator'&&!currentEditId){
-    selectedColor=INFLUENCER_COLOR;
-  }
-  if(channel){renderColorPicker(selectedColor);}
 }
 
 // ---- Stats / filter ----
@@ -651,14 +640,9 @@ function renderFilterChips(){
   allChip.style.cssText='color:#7c5cbf;background:#ede9f7';
   allChip.innerHTML='<span class="dot"></span> All';allChip.onclick=function(){toggleFilter('all');};chips.appendChild(allChip);
   // One chip per channel that has posts
-  var channelColors={
-    'Influencer / Creator':'#2eaaf0','Newsletter':'#f5a623','Paid Social':'#7c5cbf',
-    'Programmatic':'#1db88e','Sponsorships':'#e85d7a','Partnerships':'#3c8fe0',
-    'DOOH':'#e07b3c','Paid Search':'#e05252','Customer Story':'#5f9b3c'
-  };
   var seen={};posts.forEach(function(p){if(p.channel&&!seen[p.channel])seen[p.channel]=true;});
   Object.keys(seen).sort().forEach(function(ch){
-    var color=channelColors[ch]||'#7c5cbf';
+    var color=CHANNEL_COLORS[ch]||'#7c5cbf';
     var chip=document.createElement('div');chip.className='chip'+(activeFilters.has(ch)?' active':'');
     chip.style.cssText='color:'+color+';background:'+rgba(color,0.1);
     chip.innerHTML='<span class="dot"></span>'+(CHANNEL_ICONS[ch]||'')+' '+ch;
@@ -679,8 +663,7 @@ function getPostLabel(post){
   return post.title||post.channel;
 }
 function getPostColor(post){
-  if(post.channel==='Influencer / Creator')return post.color||INFLUENCER_COLOR;
-  return post.color||COLORS[0].hex;
+  return CHANNEL_COLORS[post.channel]||COLORS[0].hex;
 }
 
 function renderCalendar(){
@@ -709,7 +692,7 @@ function renderCalendar(){
         var pill=document.createElement('div');pill.className='post-pill';
         pill.style.cssText='background:'+rgba(color,0.15)+';color:'+color;
         pill.title=getPostLabel(post)+' — '+post.title;
-        pill.innerHTML='<span class="ch-icon">'+getPostIcon(post)+'</span><span style="overflow:hidden;text-overflow:ellipsis">'+getPostLabel(post)+'</span>';
+        pill.innerHTML='<span class="ch-icon">'+getPostIcon(post)+'</span><span>'+getPostLabel(post)+'</span>';
         pill.onclick=function(e){e.stopPropagation();openEditModal(post.id);};
         cell.appendChild(pill);
       });
@@ -761,15 +744,6 @@ function updateInfluencerSuggestions(){
   names.sort();dl.innerHTML=names.map(function(n){return'<option value="'+n+'">';}).join('');
 }
 
-function renderColorPicker(sel){
-  var cp=document.getElementById('colorPicker');if(!cp)return;cp.innerHTML='';
-  COLORS.forEach(function(c){
-    var sw=document.createElement('div');sw.className='color-swatch'+(c.hex===sel?' selected':'');
-    sw.style.background=c.hex;sw.title=c.name;
-    sw.onclick=function(){selectedColor=c.hex;document.querySelectorAll('.color-swatch').forEach(function(s){s.classList.remove('selected');});sw.classList.add('selected');};
-    cp.appendChild(sw);
-  });
-}
 
 // ---- Day modal ----
 function openDayModal(dateStr,dayPosts){
@@ -804,7 +778,6 @@ function openAddModal(dateStr){
   document.getElementById('postNotes').value='';
   document.getElementById('postStatus').value='Planned';
   var chSel=document.getElementById('postChannel');chSel.selectedIndex=0;chSel.value='';chSel.blur();
-  document.getElementById('colorRow').style.display='none';
   document.getElementById('nameFieldRow').style.display='none';
   ['fieldsInfluencer','fieldsPaidSocial','fieldsProgo','fieldsSponsorship','fieldsPartnership','fieldsPaidSearch','fieldsCustomerStory'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('visible');});
   onChannelChange('');
@@ -813,8 +786,6 @@ function openAddModal(dateStr){
   document.getElementById('paidSearchType').value='PMax';
   document.getElementById('psEvergreen').checked=false;
   document.getElementById('progoEvergreen').checked=false;
-  selectedColor=COLORS[0].hex;
-  renderColorPicker(selectedColor);
   document.getElementById('addModal').classList.add('open');
 }
 
@@ -829,7 +800,6 @@ function openEditModal(id){
   document.getElementById('postTitle').value=post.title;
   document.getElementById('postNotes').value=post.notes||'';
   document.getElementById('postStatus').value=post.status||'Planned';
-  selectedColor=post.color||COLORS[0].hex;
   resetAllDropdowns();
   var channel=post.channel||'';
   document.getElementById('postChannel').value=channel;
@@ -862,7 +832,6 @@ function openEditModal(id){
   } else if(channel==='Customer Story'){
     document.getElementById('customerStoryFormat').value=post.format||'';
   }
-  renderColorPicker(selectedColor);
   document.getElementById('addModal').classList.add('open');
 }
 
@@ -907,11 +876,8 @@ async function savePost(){
   } else {
     platforms=[channel];
   }
-  // Use blue as default for Influencer/Creator, otherwise keep selectedColor
-  var defaultColor=channel==='Influencer / Creator'?INFLUENCER_COLOR:COLORS[0].hex;
-  // Use the color the user explicitly picked; only auto-fill on new posts if name already exists
-  var color=selectedColor;
-  if(!currentEditId&&influencer){var existingByName=posts.find(function(p){return p.influencer===influencer&&p.channel===channel;});if(existingByName&&selectedColor===COLORS[0].hex&&selectedColor!==INFLUENCER_COLOR)color=existingByName.color;}
+  // Auto-assign color based on channel
+  var color=CHANNEL_COLORS[channel]||COLORS[0].hex;
   var id=currentEditId||uid();
   var postObj={id:id,date:date,influencer:influencer,title:title,platforms:platforms,types:types,notes:notes,status:status,color:color,channel:channel,subType:subType,format:format,funnel:funnel,audience:audience,evergreen:evergreen};
   if(currentEditId){var idx=posts.findIndex(function(p){return p.id===currentEditId;});if(idx>=0)posts[idx]=postObj;else posts.push(postObj);}
@@ -943,7 +909,6 @@ document.getElementById('addModal').addEventListener('click',function(e){if(e.ta
 document.getElementById('dayModal').addEventListener('click',function(e){if(e.target===this)closeModal('dayModal');});
 
 Object.keys(MS_CONFIG).forEach(function(key){buildDropdown(key);updateMsLabel(key);});
-renderColorPicker(COLORS[0].hex);
 setInterval(updateSyncStatus,10000);
 setInterval(function(){loadPosts(true);},30000);
 loadPosts();
