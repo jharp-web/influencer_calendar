@@ -481,7 +481,14 @@ function normalizeDate(raw){
 
 function migratePost(p){
   var channel=p.channel||'';
-  if(!channel&&p.platforms&&(Array.isArray(p.platforms)?p.platforms.length:p.platform))channel='Influencer / Creator';
+  if(!channel){
+    // If platforms[0] is a known channel name, restore it (happens when Apps Script hasn't saved the channel column yet)
+    var pArr=Array.isArray(p.platforms)?p.platforms:(p.platform?[p.platform]:[]);
+    if(pArr.length){
+      var knownChannels=Object.keys(CHANNEL_ICONS);
+      channel=knownChannels.indexOf(pArr[0])>-1?pArr[0]:'Influencer / Creator';
+    }
+  }
   return{
     ...p,
     date:normalizeDate(p.date),
@@ -795,8 +802,10 @@ function openAddModal(dateStr){
   document.getElementById('postTitle').value='';
   document.getElementById('postNotes').value='';
   document.getElementById('postStatus').value='Planned';
-  var chSel=document.getElementById('postChannel');chSel.selectedIndex=0;chSel.value='';
+  var chSel=document.getElementById('postChannel');chSel.selectedIndex=0;chSel.value='';chSel.blur();
   document.getElementById('colorRow').style.display='none';
+  document.getElementById('nameFieldRow').style.display='none';
+  ['fieldsInfluencer','fieldsPaidSocial','fieldsProgo','fieldsSponsorship','fieldsPartnership','fieldsPaidSearch','fieldsCustomerStory'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('visible');});
   onChannelChange('');
   resetAllDropdowns();
   ['psFunnel','progoFunnel','sponsorshipType','partnershipType','customerStoryFormat'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
