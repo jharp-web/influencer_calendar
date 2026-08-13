@@ -33,7 +33,7 @@ function getSheet() {
 function initSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.insertSheet('Posts');
-  sheet.appendRow(['id','date','influencer','title','platforms','types','notes','status','color','channel','subType','format','funnel','audience','evergreen']);
+  sheet.appendRow(['id','date','endDate','influencer','title','platforms','types','notes','status','color','channel','subType','format','funnel','audience','evergreen']);
   return sheet;
 }
 
@@ -78,7 +78,7 @@ function upsertPost(post) {
   var headers = data[0];
 
   // Ensure all new columns exist
-  var requiredHeaders = ['id','date','influencer','title','platforms','types','notes','status','color','channel','subType','format','funnel','audience','evergreen'];
+  var requiredHeaders = ['id','date','endDate','influencer','title','platforms','types','notes','status','color','channel','subType','format','funnel','audience','evergreen'];
   requiredHeaders.forEach(function(h) {
     if (headers.indexOf(h) < 0) {
       sheet.getRange(1, headers.length + 1).setValue(h);
@@ -100,6 +100,7 @@ function upsertPost(post) {
       var vals = row.getValues()[0];
       vals[colIdx('id')]         = post.id || '';
       vals[colIdx('date')]       = post.date || '';
+      vals[colIdx('endDate')]    = post.endDate || '';
       vals[colIdx('influencer')] = post.influencer || '';
       vals[colIdx('title')]      = post.title || '';
       vals[colIdx('platforms')]  = platformsStr;
@@ -122,6 +123,7 @@ function upsertPost(post) {
   var newRow = new Array(headers.length).fill('');
   newRow[colIdx('id')]         = post.id || '';
   newRow[colIdx('date')]       = post.date || '';
+  newRow[colIdx('endDate')]    = post.endDate || '';
   newRow[colIdx('influencer')] = post.influencer || '';
   newRow[colIdx('title')]      = post.title || '';
   newRow[colIdx('platforms')]  = platformsStr;
