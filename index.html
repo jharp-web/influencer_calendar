@@ -46,26 +46,25 @@
   .view-btn{padding:6px 12px;font-size:0.78rem;font-weight:600;border:none;background:var(--surface);cursor:pointer;color:var(--text-muted);transition:all 0.15s;}
   .view-btn.active{background:var(--accent);color:#fff;}
   main{padding:22px 28px;max-width:1800px;margin:0 auto;}
-  .months-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
-  @media(max-width:1200px){.months-grid{grid-template-columns:repeat(2,1fr);}}
-  @media(max-width:700px){.months-grid{grid-template-columns:1fr;}}
+  .months-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px;}
+  @media(max-width:800px){.months-grid{grid-template-columns:1fr;}}
   .month-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;}
-  .month-header{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-  .month-header h2{font-size:0.95rem;font-weight:700;}
-  .month-header .post-count{font-size:0.75rem;color:var(--text-muted);background:var(--bg);padding:3px 9px;border-radius:20px;}
+  .month-header{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .month-header h2{font-size:1.05rem;font-weight:700;}
+  .month-header .post-count{font-size:0.78rem;color:var(--text-muted);background:var(--bg);padding:3px 10px;border-radius:20px;}
   .calendar-grid{display:grid;grid-template-columns:repeat(5,1fr);}
-  .day-header{padding:7px 4px;text-align:center;font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);border-right:1px solid var(--border);}
+  .day-header{padding:9px 6px;text-align:center;font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);border-right:1px solid var(--border);}
   .day-header:last-child{border-right:none;}
-  .day-cell{min-height:78px;padding:5px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;position:relative;}
+  .day-cell{height:120px;overflow:hidden;padding:6px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;position:relative;vertical-align:top;}
   .day-cell:hover{background:#f5f4f1;}
   .day-cell:nth-child(5n){border-right:none;}
   .day-cell.empty{background:#fafaf9;cursor:default;}
   .day-cell.today{background:var(--today-bg);}
   .day-cell.today .day-num{background:var(--today-border);color:#1a1814;}
-  .day-num{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;font-size:0.73rem;font-weight:600;color:var(--text-muted);margin-bottom:3px;}
-  .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
+  .day-num{display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;border-radius:50%;font-size:0.76rem;font-weight:600;color:var(--text-muted);margin-bottom:4px;}
+  .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:600;margin-bottom:3px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
   .post-pill:hover{opacity:0.72;}
-  .post-pill .ch-icon{flex-shrink:0;font-size:0.72rem;}
+  .post-pill .ch-icon{flex-shrink:0;font-size:0.74rem;}
   /* Multi-day span: all variants use identical width/height so every day looks the same.
      margin:-5px cancels cell padding, flushing the bar to the cell edge. */
   .post-pill.span-left,.post-pill.span-mid,.post-pill.span-right,.post-pill.span-solo{
@@ -755,7 +754,7 @@ function renderCalendar(){
         return bSpan-aSpan;
       });
       var num=document.createElement('div');num.className='day-num';num.textContent=day;cell.appendChild(num);
-      dayPosts.slice(0,3).forEach(function(post){
+      dayPosts.slice(0,4).forEach(function(post){
         var color=getPostColor(post);
         var hasSpan=post.endDate&&post.endDate>post.date;
         var pill=document.createElement('div');pill.className='post-pill';
@@ -780,9 +779,9 @@ function renderCalendar(){
         pill.onclick=function(e){e.stopPropagation();openEditModal(post.id);};
         cell.appendChild(pill);
       });
-      if(dayPosts.length>3){
+      if(dayPosts.length>4){
         var more=document.createElement('div');more.className='more-posts';
-        more.textContent='+'+(dayPosts.length-3)+' more';
+        more.textContent='+'+(dayPosts.length-4)+' more';
         more.onclick=function(e){e.stopPropagation();openDayModal(dateStr,dayPosts);};
         cell.appendChild(more);
       }
