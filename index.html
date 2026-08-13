@@ -734,7 +734,8 @@ function renderCalendar(){
     var cal=document.createElement('div');cal.className='calendar-grid';
     ['Mon','Tue','Wed','Thu','Fri'].forEach(function(d){var dh=document.createElement('div');dh.className='day-header';dh.textContent=d;cal.appendChild(dh);});
     var firstDow=new Date(mo.year,mo.month,1).getDay();
-    var firstOffset=(firstDow===0)?4:(firstDow-1);
+    // Mon=1..Fri=5 → offset is dow-1; Sat(6) or Sun(0) → first weekday is Mon, offset=0
+    var firstOffset=(firstDow>=1&&firstDow<=5)?firstDow-1:0;
     for(var i=0;i<firstOffset;i++){var b=document.createElement('div');b.className='day-cell empty';cal.appendChild(b);}
     var today=new Date(),days=new Date(mo.year,mo.month+1,0).getDate();
     for(var d=1;d<=days;d++){(function(day){
