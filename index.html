@@ -66,15 +66,23 @@
   .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
   .post-pill:hover{opacity:0.72;}
   .post-pill .ch-icon{flex-shrink:0;font-size:0.72rem;}
-  /* Multi-day span variants — fixed height keeps all segments the same size */
-  .post-pill.span-left,.post-pill.span-mid,.post-pill.span-right{height:18px;min-height:18px;align-items:center;overflow:hidden;white-space:nowrap;flex-wrap:nowrap;position:relative;z-index:5;}
-  .post-pill.span-left{border-radius:4px 0 0 4px;width:calc(100% + 6px);max-width:none;}
-  .post-pill.span-mid{border-radius:0;width:calc(100% + 12px);max-width:none;margin-left:-6px;padding-left:8px;}
-  .post-pill.span-right{border-radius:0 4px 4px 0;width:calc(100% + 6px);max-width:none;margin-left:-6px;padding-left:8px;}
-  .post-pill.span-left .pill-label{overflow:hidden;text-overflow:ellipsis;}
-  .post-pill.span-cont .ch-icon{display:none;}
-  .post-pill.span-cont .pill-label{display:none;}
-  .post-pill.span-cont{height:18px;min-height:18px;}
+  /* Multi-day span: all variants use identical width/height so every day looks the same.
+     margin:-5px cancels cell padding, flushing the bar to the cell edge. */
+  .post-pill.span-left,.post-pill.span-mid,.post-pill.span-right,.post-pill.span-solo{
+    height:18px;min-height:18px;max-height:18px;
+    margin-left:-5px;margin-right:-5px;margin-bottom:2px;
+    width:calc(100% + 10px);max-width:none;
+    padding:0 6px;
+    align-items:center;overflow:hidden;white-space:nowrap;
+    position:relative;z-index:5;
+    border-radius:0;
+  }
+  .post-pill.span-left{border-radius:4px 0 0 4px;}
+  .post-pill.span-right{border-radius:0 4px 4px 0;}
+  .post-pill.span-solo{border-radius:4px;}
+  .post-pill.span-left .pill-label,.post-pill.span-solo .pill-label{overflow:hidden;text-overflow:ellipsis;}
+  .post-pill.span-cont .ch-icon,.post-pill.span-cont .pill-label{display:none;}
+  .post-pill.span-cont{padding:0;}
   .more-posts{font-size:0.63rem;color:var(--text-muted);font-weight:600;padding:1px 3px;cursor:pointer;}
   .list-view{display:none;}
   .list-view.visible{display:block;}
@@ -514,6 +522,15 @@ function migratePost(p){
   };
 }
 
+// localStorage cache so endDates survive page reloads (until Apps Script is updated to save them)
+var END_DATE_KEY='mkCalEndDates';
+function getEndDateStore(){try{return JSON.parse(localStorage.getItem(END_DATE_KEY)||'{}');}catch(e){return {};}}
+function setEndDateStore(id,endDate){
+  var cache=getEndDateStore();
+  if(endDate){cache[id]=endDate;}else{delete cache[id];}
+  try{localStorage.setItem(END_DATE_KEY,JSON.stringify(cache));}catch(e){}
+}
+
 function onStartDateChange(){
   var sd=document.getElementById('postDate').value;
   var edInput=document.getElementById('postEndDate');
@@ -530,11 +547,10 @@ async function loadPosts(silent){
     const res=await fetch(APPS_SCRIPT_URL);
     const data=await res.json();
     if(data.error)throw new Error(data.error);
-    // Preserve any locally-known endDates the server doesn't have yet (until Apps Script is updated)
-    var localEndDates={};
-    posts.forEach(function(p){if(p.endDate)localEndDates[p.id]=p.endDate;});
+    // Restore endDates from localStorage when server doesn't return them (until Apps Script is updated)
+    var endDateCache=getEndDateStore();
     posts=(data.posts||[]).map(migratePost).map(function(p){
-      if(!p.endDate&&localEndDates[p.id])p={...p,endDate:localEndDates[p.id]};
+      if(!p.endDate&&endDateCache[p.id])p={...p,endDate:endDateCache[p.id]};
       return p;
     });
     lastSynced=new Date();updateSyncStatus();renderAll();return true;
@@ -751,7 +767,7 @@ function renderCalendar(){
           var isMon=dow===1;var isFri=dow===5;
           var visStart=isStartDay||(isMon&&!isStartDay);
           var visEnd=isEndDay||(isFri&&!isEndDay);
-          if(visStart&&visEnd){/* solo visual segment — normal pill, show label */}
+          if(visStart&&visEnd){pill.classList.add('span-solo');}
           else if(visStart){pill.classList.add('span-left');}
           else if(visEnd){pill.classList.add('span-right');}
           else{pill.classList.add('span-mid');}
@@ -952,6 +968,7 @@ async function savePost(){
   var color=CHANNEL_COLORS[channel]||COLORS[0].hex;
   var id=currentEditId||uid();
   var postObj={id:id,date:date,endDate:endDate,influencer:influencer,title:title,platforms:platforms,types:types,notes:notes,status:status,color:color,channel:channel,subType:subType,format:format,funnel:funnel,audience:audience,evergreen:evergreen};
+  setEndDateStore(id, endDate); // persist endDate in localStorage across page reloads
   if(currentEditId){var idx=posts.findIndex(function(p){return p.id===currentEditId;});if(idx>=0)posts[idx]=postObj;else posts.push(postObj);}
   else{posts.push(postObj);}
   closeModal('addModal');renderAll();
@@ -966,7 +983,7 @@ async function savePost(){
 
 async function deleteCurrentPost(){
   if(!currentEditId)return;if(!confirm('Delete this post?'))return;
-  var id=currentEditId;posts=posts.filter(function(p){return p.id!==id;});closeModal('addModal');renderAll();
+  var id=currentEditId;setEndDateStore(id,'');posts=posts.filter(function(p){return p.id!==id;});closeModal('addModal');renderAll();
   setSyncing(true);await pushDelete(id);await loadPosts(true);setSyncing(false);
 }
 
