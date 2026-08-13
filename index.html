@@ -139,6 +139,8 @@
   .evergreen-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:0.68rem;font-weight:700;background:#d1fae5;color:#065f46;}
   .setup-banner{background:#fff8e7;border-bottom:2px solid #f5c842;padding:12px 28px;font-size:0.85rem;display:none;}
   .setup-banner.visible{display:block;}
+  .readonly-banner{background:#fff8e7;border:1px solid #f5c842;border-radius:7px;padding:10px 13px;font-size:0.82rem;color:#92400e;margin-bottom:14px;display:none;gap:8px;align-items:flex-start;}
+  .readonly-banner.visible{display:flex;}
 </style>
 </head>
 <body>
@@ -190,6 +192,7 @@
       <button class="modal-close" onclick="closeModal('addModal')">✕</button>
     </div>
     <div class="modal-body">
+      <div id="readOnlyBanner" class="readonly-banner"></div>
       <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
         <div class="form-group">
           <label>Start Date *</label>
@@ -515,7 +518,9 @@ function migratePost(p){
     format:p.format||'',
     funnel:p.funnel||'',
     audience:Array.isArray(p.audience)?p.audience:(p.audience?[p.audience]:[]),
-    evergreen:p.evergreen===true||p.evergreen==='TRUE'||p.evergreen==='true'
+    evergreen:p.evergreen===true||p.evergreen==='TRUE'||p.evergreen==='true',
+    readOnly:p.readOnly===true||p.readOnly==='TRUE'||p.readOnly==='true',
+    source:p.source||''
   };
 }
 
@@ -852,6 +857,8 @@ function openAddModal(dateStr){
   currentEditId=null;
   document.getElementById('modalTitle').textContent='Add Post';
   document.getElementById('deleteBtn').style.display='none';
+  var _banner=document.getElementById('readOnlyBanner');if(_banner){_banner.className='readonly-banner';_banner.innerHTML='';}
+  var _saveBtn=document.querySelector('#addModal .btn-primary');if(_saveBtn){_saveBtn.disabled=false;_saveBtn.style.opacity='';_saveBtn.style.cursor='';}
   document.getElementById('postDate').value=dateStr||'';
   document.getElementById('postEndDate').value='';
   document.getElementById('postInfluencer').value='';
@@ -914,6 +921,20 @@ function openEditModal(id){
   } else if(channel==='Customer Story'){
     document.getElementById('customerStoryFormat').value=post.format||'';
   }
+  // Read-only banner for external posts
+  var isReadOnly=post.readOnly||false;
+  var _banner=document.getElementById('readOnlyBanner');
+  var _saveBtn=document.querySelector('#addModal .btn-primary');
+  if(isReadOnly){
+    document.getElementById('modalTitle').textContent='View Post';
+    _banner.innerHTML='📋 <strong>Read-only:</strong> This post is from <em>'+(post.source||'an external sheet')+'</em> — edit it in its source sheet to make changes.';
+    _banner.classList.add('visible');
+    document.getElementById('deleteBtn').style.display='none';
+    if(_saveBtn){_saveBtn.disabled=true;_saveBtn.style.opacity='0.4';_saveBtn.style.cursor='not-allowed';}
+  }else{
+    _banner.className='readonly-banner';_banner.innerHTML='';
+    if(_saveBtn){_saveBtn.disabled=false;_saveBtn.style.opacity='';_saveBtn.style.cursor='';}
+  }
   document.getElementById('addModal').classList.add('open');
 }
 
@@ -923,6 +944,7 @@ function closeModal(id){
 }
 
 async function savePost(){
+  if(currentEditId){var _chk=posts.find(function(p){return p.id===currentEditId;});if(_chk&&_chk.readOnly){showToast('This post comes from an external sheet and cannot be edited here.','error');return;}}
   var date=document.getElementById('postDate').value;
   var endDate=document.getElementById('postEndDate').value||'';
   if(endDate&&endDate<date){alert('End Date must be on or after Start Date.');return;}
@@ -978,7 +1000,10 @@ async function savePost(){
 }
 
 async function deleteCurrentPost(){
-  if(!currentEditId)return;if(!confirm('Delete this post?'))return;
+  if(!currentEditId)return;
+  var _del=posts.find(function(p){return p.id===currentEditId;});
+  if(_del&&_del.readOnly){showToast('External posts cannot be deleted from the calendar.','error');return;}
+  if(!confirm('Delete this post?'))return;
   var id=currentEditId;setEndDateStore(id,'');posts=posts.filter(function(p){return p.id!==id;});closeModal('addModal');renderAll();
   setSyncing(true);await pushDelete(id);await loadPosts(true);setSyncing(false);
 }
