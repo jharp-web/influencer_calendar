@@ -66,13 +66,15 @@
   .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
   .post-pill:hover{opacity:0.72;}
   .post-pill .ch-icon{flex-shrink:0;font-size:0.72rem;}
-  /* Multi-day span variants — position:relative + z-index paints above neighbouring cell backgrounds */
-  .post-pill.span-left{border-radius:4px 0 0 4px;width:calc(100% + 6px);max-width:none;position:relative;z-index:5;}
-  .post-pill.span-mid{border-radius:0;width:calc(100% + 12px);max-width:none;margin-left:-6px;padding-left:8px;position:relative;z-index:5;}
-  .post-pill.span-right{border-radius:0 4px 4px 0;width:calc(100% + 6px);max-width:none;margin-left:-6px;padding-left:8px;position:relative;z-index:5;}
+  /* Multi-day span variants — fixed height keeps all segments the same size */
+  .post-pill.span-left,.post-pill.span-mid,.post-pill.span-right{height:18px;min-height:18px;align-items:center;overflow:hidden;white-space:nowrap;flex-wrap:nowrap;position:relative;z-index:5;}
+  .post-pill.span-left{border-radius:4px 0 0 4px;width:calc(100% + 6px);max-width:none;}
+  .post-pill.span-mid{border-radius:0;width:calc(100% + 12px);max-width:none;margin-left:-6px;padding-left:8px;}
+  .post-pill.span-right{border-radius:0 4px 4px 0;width:calc(100% + 6px);max-width:none;margin-left:-6px;padding-left:8px;}
+  .post-pill.span-left .pill-label{overflow:hidden;text-overflow:ellipsis;}
   .post-pill.span-cont .ch-icon{display:none;}
   .post-pill.span-cont .pill-label{display:none;}
-  .post-pill.span-cont{min-height:16px;padding-top:4px;padding-bottom:4px;}
+  .post-pill.span-cont{height:18px;min-height:18px;}
   .more-posts{font-size:0.63rem;color:var(--text-muted);font-weight:600;padding:1px 3px;cursor:pointer;}
   .list-view{display:none;}
   .list-view.visible{display:block;}
@@ -528,7 +530,13 @@ async function loadPosts(silent){
     const res=await fetch(APPS_SCRIPT_URL);
     const data=await res.json();
     if(data.error)throw new Error(data.error);
-    posts=(data.posts||[]).map(migratePost);
+    // Preserve any locally-known endDates the server doesn't have yet (until Apps Script is updated)
+    var localEndDates={};
+    posts.forEach(function(p){if(p.endDate)localEndDates[p.id]=p.endDate;});
+    posts=(data.posts||[]).map(migratePost).map(function(p){
+      if(!p.endDate&&localEndDates[p.id])p={...p,endDate:localEndDates[p.id]};
+      return p;
+    });
     lastSynced=new Date();updateSyncStatus();renderAll();return true;
   }catch(err){
     if(!silent)showToast('Could not connect to Google Sheets.','error');return false;
