@@ -82,7 +82,7 @@
   .post-pill.span-left .pill-label,.post-pill.span-solo .pill-label{overflow:hidden;text-overflow:ellipsis;}
   .post-pill.span-cont .ch-icon,.post-pill.span-cont .pill-label{display:none;}
   .post-pill.span-cont{padding:0;}
-  .more-posts{font-size:0.63rem;color:var(--text-muted);font-weight:600;padding:1px 3px;cursor:pointer;}
+  .more-posts{font-size:0.68rem;color:var(--text-muted);font-weight:600;padding:2px 4px;cursor:pointer;position:absolute;bottom:4px;left:6px;background:var(--surface);border-radius:3px;}
   .list-view{display:none;}
   .list-view.visible{display:block;}
   .list-month{margin-bottom:26px;}
@@ -754,7 +754,7 @@ function renderCalendar(){
         return bSpan-aSpan;
       });
       var num=document.createElement('div');num.className='day-num';num.textContent=day;cell.appendChild(num);
-      dayPosts.slice(0,4).forEach(function(post){
+      dayPosts.slice(0,3).forEach(function(post){
         var color=getPostColor(post);
         var hasSpan=post.endDate&&post.endDate>post.date;
         var pill=document.createElement('div');pill.className='post-pill';
@@ -779,9 +779,9 @@ function renderCalendar(){
         pill.onclick=function(e){e.stopPropagation();openEditModal(post.id);};
         cell.appendChild(pill);
       });
-      if(dayPosts.length>4){
+      if(dayPosts.length>3){
         var more=document.createElement('div');more.className='more-posts';
-        more.textContent='+'+(dayPosts.length-4)+' more';
+        more.textContent='+'+(dayPosts.length-3)+' more';
         more.onclick=function(e){e.stopPropagation();openDayModal(dateStr,dayPosts);};
         cell.appendChild(more);
       }
