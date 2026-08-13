@@ -66,6 +66,13 @@
   .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
   .post-pill:hover{opacity:0.72;}
   .post-pill .ch-icon{flex-shrink:0;font-size:0.72rem;}
+  /* Multi-day span variants */
+  .post-pill.span-left{border-radius:4px 0 0 4px;width:calc(100% + 6px);max-width:none;}
+  .post-pill.span-mid{border-radius:0;width:calc(100% + 12px);max-width:none;margin-left:-6px;padding-left:8px;}
+  .post-pill.span-right{border-radius:0 4px 4px 0;width:calc(100% + 6px);max-width:none;margin-left:-6px;padding-left:8px;}
+  .post-pill.span-cont .ch-icon{display:none;}
+  .post-pill.span-cont .pill-label{display:none;}
+  .post-pill.span-cont{min-height:15px;padding-top:3px;padding-bottom:3px;}
   .more-posts{font-size:0.63rem;color:var(--text-muted);font-weight:600;padding:1px 3px;cursor:pointer;}
   .list-view{display:none;}
   .list-view.visible{display:block;}
@@ -174,10 +181,14 @@
       <button class="modal-close" onclick="closeModal('addModal')">✕</button>
     </div>
     <div class="modal-body">
-      <div class="form-row">
+      <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
         <div class="form-group">
-          <label>Date *</label>
-          <input type="date" id="postDate" min="2026-08-01" max="2026-12-31">
+          <label>Start Date *</label>
+          <input type="date" id="postDate" min="2026-08-01" max="2026-12-31" onchange="onStartDateChange()">
+        </div>
+        <div class="form-group">
+          <label>End Date</label>
+          <input type="date" id="postEndDate" min="2026-08-01" max="2026-12-31">
         </div>
         <div class="form-group">
           <label>Status</label>
@@ -489,6 +500,7 @@ function migratePost(p){
   return{
     ...p,
     date:normalizeDate(p.date),
+    endDate:normalizeDate(p.endDate)||'',
     platforms:Array.isArray(p.platforms)?p.platforms:(p.platform?[p.platform]:[]),
     types:Array.isArray(p.types)?p.types:(p.type?[p.type]:[]),
     channel:channel,
@@ -498,6 +510,15 @@ function migratePost(p){
     audience:Array.isArray(p.audience)?p.audience:(p.audience?[p.audience]:[]),
     evergreen:p.evergreen===true||p.evergreen==='TRUE'||p.evergreen==='true'
   };
+}
+
+function onStartDateChange(){
+  var sd=document.getElementById('postDate').value;
+  var edInput=document.getElementById('postEndDate');
+  if(sd){
+    edInput.min=sd;
+    if(edInput.value&&edInput.value<sd)edInput.value=sd;
+  }
 }
 
 async function loadPosts(silent){
@@ -652,6 +673,12 @@ function renderFilterChips(){
 
 function renderAll(){renderStats();renderFilterChips();renderCalendar();renderListView();updateInfluencerSuggestions();}
 
+function formatDateShort(dateStr){
+  if(!dateStr)return'';
+  var d=new Date(dateStr+'T00:00:00');
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
 function getPostIcon(post){
   if(post.channel==='Influencer / Creator'&&post.platforms&&post.platforms.length){
     return post.platforms.slice(0,2).map(function(v){return PLATFORM_ICON[v]||'🔗';}).join('');
@@ -669,9 +696,17 @@ function getPostColor(post){
 function renderCalendar(){
   var grid=document.getElementById('monthsGrid');grid.innerHTML='';var filtered=getFilteredPosts();
   MONTHS.forEach(function(mo){
-    var mp=filtered.filter(function(p){var d=new Date(p.date+'T00:00:00');return d.getMonth()===mo.month&&d.getFullYear()===mo.year;});
+    var pad2=function(n){return String(n).padStart(2,'0');};
+    var mStart=mo.year+'-'+pad2(mo.month+1)+'-01';
+    var mEnd=mo.year+'-'+pad2(mo.month+1)+'-'+pad2(new Date(mo.year,mo.month+1,0).getDate());
+    var mp=filtered.filter(function(p){
+      var ed=p.endDate||p.date;
+      return p.date<=mEnd&&ed>=mStart;
+    });
+    // Count unique posts starting this month for the header
+    var startCount=mp.filter(function(p){var d=new Date(p.date+'T00:00:00');return d.getMonth()===mo.month&&d.getFullYear()===mo.year;}).length;
     var card=document.createElement('div');card.className='month-card';
-    card.innerHTML='<div class="month-header"><h2>'+mo.name+' '+mo.year+'</h2><span class="post-count">'+mp.length+' post'+(mp.length!==1?'s':'')+'</span></div>';
+    card.innerHTML='<div class="month-header"><h2>'+mo.name+' '+mo.year+'</h2><span class="post-count">'+startCount+' post'+(startCount!==1?'s':'')+'</span></div>';
     var cal=document.createElement('div');cal.className='calendar-grid';
     ['Mon','Tue','Wed','Thu','Fri'].forEach(function(d){var dh=document.createElement('div');dh.className='day-header';dh.textContent=d;cal.appendChild(dh);});
     var firstDow=new Date(mo.year,mo.month,1).getDay();
@@ -685,14 +720,32 @@ function renderCalendar(){
       if(today.getFullYear()===mo.year&&today.getMonth()===mo.month&&today.getDate()===day)cell.classList.add('today');
       var pad=function(n){return String(n).padStart(2,'0');};
       var dateStr=mo.year+'-'+pad(mo.month+1)+'-'+pad(day);
-      var dayPosts=mp.filter(function(p){return p.date===dateStr;});
+      var dayPosts=mp.filter(function(p){
+        var ed=p.endDate||p.date;
+        return p.date<=dateStr&&ed>=dateStr;
+      });
       var num=document.createElement('div');num.className='day-num';num.textContent=day;cell.appendChild(num);
       dayPosts.slice(0,3).forEach(function(post){
         var color=getPostColor(post);
         var pill=document.createElement('div');pill.className='post-pill';
         pill.style.cssText='background:'+rgba(color,0.15)+';color:'+color;
-        pill.title=getPostLabel(post)+' — '+post.title;
-        pill.innerHTML='<span class="ch-icon">'+getPostIcon(post)+'</span><span>'+getPostLabel(post)+'</span>';
+        // Determine span classes for multi-day posts
+        var hasSpan=post.endDate&&post.endDate>post.date;
+        if(hasSpan){
+          var isStartDay=post.date===dateStr;
+          var isEndDay=post.endDate===dateStr;
+          var isMon=dow===1;var isFri=dow===5;
+          var visStart=isStartDay||(isMon&&!isStartDay);
+          var visEnd=isEndDay||(isFri&&!isEndDay);
+          if(visStart&&visEnd){/* no span classes - solo segment */}
+          else if(visStart){pill.classList.add('span-left');}
+          else if(visEnd){pill.classList.add('span-right');}
+          else{pill.classList.add('span-mid');}
+          var showLabel=isStartDay||(isMon&&!isStartDay);
+          if(!showLabel)pill.classList.add('span-cont');
+        }
+        pill.title=getPostLabel(post)+(post.endDate&&post.endDate>post.date?' ('+formatDateShort(post.date)+' – '+formatDateShort(post.endDate)+')':'');
+        pill.innerHTML='<span class="ch-icon">'+getPostIcon(post)+'</span><span class="pill-label">'+getPostLabel(post)+'</span>';
         pill.onclick=function(e){e.stopPropagation();openEditModal(post.id);};
         cell.appendChild(pill);
       });
@@ -727,7 +780,8 @@ function renderListView(){
       if(post.channel==='Influencer / Creator'&&post.types&&post.types.length)subInfo.push(post.types.join(', '));
       var nameBadge=post.influencer?'<span class="influencer-badge" style="background:'+rgba(color,0.13)+';color:'+color+'">'+post.influencer+'</span>':'—';
       var row=document.createElement('div');row.className='list-post-row';
-      row.innerHTML='<div class="list-date">'+d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>'+
+      var dateDisplay=post.endDate&&post.endDate>post.date?formatDateShort(post.date)+' – '+formatDateShort(post.endDate):d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      row.innerHTML='<div class="list-date">'+dateDisplay+'</div>'+
         '<div><div class="list-title">'+post.title+'</div><div class="list-sub">'+(subInfo.join(' · ')||'')+'</div></div>'+
         '<div>'+channelBadge+'</div><div>'+nameBadge+'</div>'+
         '<div>'+(post.evergreen?'<span class="evergreen-badge">🌿 Evergreen</span>':'')+'</div>'+
@@ -773,6 +827,7 @@ function openAddModal(dateStr){
   document.getElementById('modalTitle').textContent='Add Post';
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('postDate').value=dateStr||'';
+  document.getElementById('postEndDate').value='';
   document.getElementById('postInfluencer').value='';
   document.getElementById('postTitle').value='';
   document.getElementById('postNotes').value='';
@@ -796,6 +851,7 @@ function openEditModal(id){
   document.getElementById('modalTitle').textContent='Edit Post';
   document.getElementById('deleteBtn').style.display='inline-flex';
   document.getElementById('postDate').value=post.date;
+  document.getElementById('postEndDate').value=post.endDate||'';
   document.getElementById('postInfluencer').value=post.influencer||'';
   document.getElementById('postTitle').value=post.title;
   document.getElementById('postNotes').value=post.notes||'';
@@ -842,11 +898,13 @@ function closeModal(id){
 
 async function savePost(){
   var date=document.getElementById('postDate').value;
+  var endDate=document.getElementById('postEndDate').value||'';
+  if(endDate&&endDate<date){alert('End Date must be on or after Start Date.');return;}
   var title=document.getElementById('postTitle').value.trim();
   var channel=document.getElementById('postChannel').value;
   var notes=document.getElementById('postNotes').value.trim();
   var status=document.getElementById('postStatus').value;
-  if(!date||!title||!channel){alert('Please fill in Date, Channel, and Post Title.');return;}
+  if(!date||!title||!channel){alert('Please fill in Start Date, Channel, and Post Title.');return;}
   var influencer=document.getElementById('postInfluencer').value.trim();
   if(CHANNELS_WITH_NAME.indexOf(channel)>-1&&!influencer){alert('Please fill in the Name / Partner field.');return;}
   var platforms=[],types=[],subType='',format='',funnel='',audience=[],evergreen=false;
@@ -879,7 +937,7 @@ async function savePost(){
   // Auto-assign color based on channel
   var color=CHANNEL_COLORS[channel]||COLORS[0].hex;
   var id=currentEditId||uid();
-  var postObj={id:id,date:date,influencer:influencer,title:title,platforms:platforms,types:types,notes:notes,status:status,color:color,channel:channel,subType:subType,format:format,funnel:funnel,audience:audience,evergreen:evergreen};
+  var postObj={id:id,date:date,endDate:endDate,influencer:influencer,title:title,platforms:platforms,types:types,notes:notes,status:status,color:color,channel:channel,subType:subType,format:format,funnel:funnel,audience:audience,evergreen:evergreen};
   if(currentEditId){var idx=posts.findIndex(function(p){return p.id===currentEditId;});if(idx>=0)posts[idx]=postObj;else posts.push(postObj);}
   else{posts.push(postObj);}
   closeModal('addModal');renderAll();
