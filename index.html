@@ -66,13 +66,13 @@
   .post-pill{display:flex;align-items:flex-start;gap:3px;padding:2px 5px;border-radius:4px;font-size:0.66rem;font-weight:600;margin-bottom:2px;cursor:pointer;transition:opacity 0.15s;max-width:100%;word-break:break-word;white-space:normal;}
   .post-pill:hover{opacity:0.72;}
   .post-pill .ch-icon{flex-shrink:0;font-size:0.72rem;}
-  /* Multi-day span variants */
-  .post-pill.span-left{border-radius:4px 0 0 4px;width:calc(100% + 6px);max-width:none;}
-  .post-pill.span-mid{border-radius:0;width:calc(100% + 12px);max-width:none;margin-left:-6px;padding-left:8px;}
-  .post-pill.span-right{border-radius:0 4px 4px 0;width:calc(100% + 6px);max-width:none;margin-left:-6px;padding-left:8px;}
+  /* Multi-day span variants — position:relative + z-index paints above neighbouring cell backgrounds */
+  .post-pill.span-left{border-radius:4px 0 0 4px;width:calc(100% + 6px);max-width:none;position:relative;z-index:5;}
+  .post-pill.span-mid{border-radius:0;width:calc(100% + 12px);max-width:none;margin-left:-6px;padding-left:8px;position:relative;z-index:5;}
+  .post-pill.span-right{border-radius:0 4px 4px 0;width:calc(100% + 6px);max-width:none;margin-left:-6px;padding-left:8px;position:relative;z-index:5;}
   .post-pill.span-cont .ch-icon{display:none;}
   .post-pill.span-cont .pill-label{display:none;}
-  .post-pill.span-cont{min-height:15px;padding-top:3px;padding-bottom:3px;}
+  .post-pill.span-cont{min-height:16px;padding-top:4px;padding-bottom:4px;}
   .more-posts{font-size:0.63rem;color:var(--text-muted);font-weight:600;padding:1px 3px;cursor:pointer;}
   .list-view{display:none;}
   .list-view.visible{display:block;}
@@ -720,31 +720,37 @@ function renderCalendar(){
       if(today.getFullYear()===mo.year&&today.getMonth()===mo.month&&today.getDate()===day)cell.classList.add('today');
       var pad=function(n){return String(n).padStart(2,'0');};
       var dateStr=mo.year+'-'+pad(mo.month+1)+'-'+pad(day);
+      // Sort: spanning posts first (appear at top of each day), then single-day
       var dayPosts=mp.filter(function(p){
         var ed=p.endDate||p.date;
         return p.date<=dateStr&&ed>=dateStr;
+      }).sort(function(a,b){
+        var aSpan=a.endDate&&a.endDate>a.date?1:0;
+        var bSpan=b.endDate&&b.endDate>b.date?1:0;
+        return bSpan-aSpan;
       });
       var num=document.createElement('div');num.className='day-num';num.textContent=day;cell.appendChild(num);
       dayPosts.slice(0,3).forEach(function(post){
         var color=getPostColor(post);
-        var pill=document.createElement('div');pill.className='post-pill';
-        pill.style.cssText='background:'+rgba(color,0.15)+';color:'+color;
-        // Determine span classes for multi-day posts
         var hasSpan=post.endDate&&post.endDate>post.date;
+        var pill=document.createElement('div');pill.className='post-pill';
+        // Span-cont bars use slightly higher opacity so they're clearly visible
+        pill.style.cssText='background:'+rgba(color,hasSpan?0.28:0.15)+';color:'+color;
+        // Determine span classes for multi-day posts
         if(hasSpan){
           var isStartDay=post.date===dateStr;
           var isEndDay=post.endDate===dateStr;
           var isMon=dow===1;var isFri=dow===5;
           var visStart=isStartDay||(isMon&&!isStartDay);
           var visEnd=isEndDay||(isFri&&!isEndDay);
-          if(visStart&&visEnd){/* no span classes - solo segment */}
+          if(visStart&&visEnd){/* solo visual segment — normal pill, show label */}
           else if(visStart){pill.classList.add('span-left');}
           else if(visEnd){pill.classList.add('span-right');}
           else{pill.classList.add('span-mid');}
           var showLabel=isStartDay||(isMon&&!isStartDay);
           if(!showLabel)pill.classList.add('span-cont');
         }
-        pill.title=getPostLabel(post)+(post.endDate&&post.endDate>post.date?' ('+formatDateShort(post.date)+' – '+formatDateShort(post.endDate)+')':'');
+        pill.title=getPostLabel(post)+(hasSpan?' ('+formatDateShort(post.date)+' – '+formatDateShort(post.endDate)+')':'');
         pill.innerHTML='<span class="ch-icon">'+getPostIcon(post)+'</span><span class="pill-label">'+getPostLabel(post)+'</span>';
         pill.onclick=function(e){e.stopPropagation();openEditModal(post.id);};
         cell.appendChild(pill);
