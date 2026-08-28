@@ -377,11 +377,17 @@ function normalizeDate(raw){
 function normalizeTeam(t,channel){
   var v=String(t||'').trim();
   for(var i=0;i<TEAMS.length;i++){if(TEAMS[i].toLowerCase()===v.toLowerCase())return TEAMS[i];}
+  if(/^(lifecycle|life cycle|crm)$/i.test(v))return'LCM';
+  if(v)return v;                        // unrecognized but explicit: keep it
+  // Nothing stored — infer from channel only when it's unambiguous.
+  // Never default to Paid; an unlabeled post is better than a wrong label.
   var c=String(channel||'').toLowerCase();
+  if(!c)return'';
   if(/newsletter|email|lifecycle/.test(c))return'LCM';
   if(/customer story|case study/.test(c))return'Brand';
   if(/linkedin|reddit|facebook|instagram|tiktok|youtube|threads|^x$|twitter/.test(c))return'Organic';
-  return'Paid';
+  if(/paid|progo|programmatic|dooh|ooh|search|direct buy|sponsor/.test(c))return'Paid';
+  return'';
 }
 
 function migratePost(p){
@@ -412,7 +418,7 @@ function formatDateShort(dateStr){
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
-function getPostColor(post){return TEAM_COLORS[post.team]||'#7a7570';}
+function getPostColor(post){return TEAM_COLORS[post.team]||'#9a948d';}
 
 function getPostLabel(post){
   if(post.influencer&&post.team==='Organic')return post.influencer+' · '+(post.title||post.channel);
@@ -420,7 +426,7 @@ function getPostLabel(post){
 }
 
 function getPostIcon(post){
-  return TEAM_ICONS[post.team]||'📌';
+  return TEAM_ICONS[post.team]||'❔';   // ❔ = no team assigned yet
 }
 
 // =====================================================================
@@ -446,8 +452,12 @@ async function loadPosts(silent){
 
 async function pushPost(post){
   try{
-    await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    var res=await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
       redirect:'follow',body:JSON.stringify({action:'save',post:post})});
+    try{
+      var out=await res.json();
+      if(out&&out.error){showToast('Sheets rejected the save: '+out.error,'error');return false;}
+    }catch(e){/* non-JSON response is fine */}
     lastSynced=new Date();updateSyncStatus();return true;
   }catch(err){showToast('Could not sync to Google Sheets.','error');return false;}
 }
@@ -619,7 +629,10 @@ function onStartDateChange(){
 // Filters
 // =====================================================================
 function getFilteredPosts(){
-  return posts.filter(function(p){return activeTeams.has(p.team);});
+  // Posts with no recognized team always show, so nothing hides silently
+  return posts.filter(function(p){
+    return TEAMS.indexOf(p.team)<0||activeTeams.has(p.team);
+  });
 }
 function toggleTeamFilter(t){
   if(activeTeams.has(t)){
@@ -643,6 +656,17 @@ function renderFilterChips(){
     chip.onclick=function(){toggleTeamFilter(t);};
     box.appendChild(chip);
   });
+
+  // Nudge if anything is missing a team — these always render, in grey
+  var unassigned=posts.filter(function(p){return TEAMS.indexOf(p.team)<0;}).length;
+  if(unassigned){
+    var note=document.createElement('div');
+    note.className='chip';
+    note.style.cssText='color:#9a948d;background:rgba(154,148,141,0.12);cursor:default';
+    note.innerHTML='<span class="dot"></span>❔ '+unassigned+' with no team';
+    note.title='These posts show in grey. Click one to assign a team.';
+    box.appendChild(note);
+  }
 }
 
 // =====================================================================
