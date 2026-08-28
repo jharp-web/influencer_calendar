@@ -4,6 +4,10 @@
 // Run runImport() ONCE to pull the two external calendars in.
 // =====================================================================
 
+// Bump this whenever the schema changes. The calendar compares it against
+// its own expected value and warns if it's talking to a stale deployment.
+var BACKEND_VERSION = '2026.3-teams';
+
 var CALENDAR_YEAR = 2026;
 
 // External source sheets (used only by runImport)
@@ -20,8 +24,14 @@ var SCHEMA = ['id','team','date','endDate','channel','platforms','postType',
 // WEB APP
 // =====================================================================
 function doGet(e) {
+  var out;
+  try {
+    out = {version: BACKEND_VERSION, schema: SCHEMA, posts: getAllPosts()};
+  } catch(err) {
+    out = {version: BACKEND_VERSION, error: err.message, posts: []};
+  }
   return ContentService
-    .createTextOutput(JSON.stringify({posts: getAllPosts()}))
+    .createTextOutput(JSON.stringify(out))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
