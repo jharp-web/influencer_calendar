@@ -166,6 +166,7 @@
       <span id="syncText"></span>
     </div>
     <button class="btn btn-secondary" style="padding:7px 10px;font-size:1rem" onclick="loadPosts()" title="Refresh">↻</button>
+    <button class="btn btn-secondary" style="padding:7px 10px;font-size:0.95rem" onclick="openConnModal()" title="Connection settings">⚙</button>
     <button class="btn btn-primary" onclick="openAddModal()">+ Add Post</button>
   </div>
 </header>
@@ -295,6 +296,38 @@
   </div>
 </div>
 
+<!-- Connection modal -->
+<div class="modal-overlay" id="connModal">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <h3>Google Sheets Connection</h3>
+      <button class="modal-close" onclick="closeModal('connModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="connStatus" style="font-size:0.83rem;padding:10px 12px;border-radius:7px;margin-bottom:14px;line-height:1.5"></div>
+      <div class="form-row full">
+        <div class="form-group">
+          <label>Apps Script Web App URL</label>
+          <input type="text" id="connUrl" placeholder="https://script.google.com/macros/s/…/exec"
+                 spellcheck="false" style="font-family:ui-monospace,Menlo,monospace;font-size:0.76rem">
+        </div>
+      </div>
+      <div style="font-size:0.79rem;color:var(--text-muted);line-height:1.6">
+        In Apps Script: <strong>Deploy → New deployment</strong> → gear icon → <strong>Web app</strong>,
+        set <em>Execute as</em> to <strong>Me</strong> and <em>Who has access</em> to <strong>Anyone</strong>,
+        then <strong>Deploy</strong> and copy the Web app URL here. It must end in <code>/exec</code>.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="resetConnUrl()">Reset to default</button>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn btn-secondary" onclick="closeModal('connModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveConnUrl()">Test &amp; Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Day modal -->
 <div class="modal-overlay" id="dayModal">
   <div class="modal" style="max-width:500px">
@@ -310,10 +343,27 @@
 </div>
 
 <script>
-const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycby-K4snEnkdMp6objKzxp2gmDfDcxVVW4fQYKUHKGaSrsbJzSRFZPursqzqO5-0YA5-/exec';
+const DEFAULT_APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycby-K4snEnkdMp6objKzxp2gmDfDcxVVW4fQYKUHKGaSrsbJzSRFZPursqzqO5-0YA5-/exec';
 // Must match BACKEND_VERSION in apps-script-code.js
 const EXPECTED_BACKEND='2026.3-teams';
+const URL_KEY='mkCalApiUrl';
 const YEAR=2026;
+
+// The deployment URL can be overridden in the ⚙ dialog and is remembered
+// in this browser, so a redeploy doesn't require editing the file.
+function getApiUrl(){
+  try{
+    var u=localStorage.getItem(URL_KEY);
+    if(u&&/^https:\/\/script\.google\.com\/.+\/exec$/.test(u))return u;
+  }catch(e){}
+  return DEFAULT_APPS_SCRIPT_URL;
+}
+function setApiUrl(u){
+  try{
+    if(u)localStorage.setItem(URL_KEY,u);
+    else localStorage.removeItem(URL_KEY);
+  }catch(e){}
+}
 
 const TEAMS=['Paid','Organic','LCM','Brand'];
 const TEAM_COLORS={'Paid':'#7c5cbf','Organic':'#1db88e','LCM':'#f5a623','Brand':'#e85d7a'};
@@ -443,7 +493,7 @@ async function loadPosts(silent){
   if(!silent)document.getElementById('loadingOverlay').classList.remove('hidden');
   setSyncing(true);
   try{
-    const res=await fetch(APPS_SCRIPT_URL+'?t='+Date.now(),{cache:'no-store'});
+    const res=await fetch(getApiUrl()+'?t='+Date.now(),{cache:'no-store'});
     const data=await res.json();
     if(data.error)throw new Error(data.error);
     checkBackendVersion(data);
@@ -474,17 +524,75 @@ function checkBackendVersion(data){
     msg='<strong>⚠️ Backend version mismatch.</strong> This page expects <code>'+esc(EXPECTED_BACKEND)+
         '</code> but the deployment reports <code>'+esc(v)+'</code>.';
   }
-  msg+='<br>Fix: in Apps Script go to <strong>Deploy → Manage deployments</strong>, copy the '+
-       '<strong>Web app URL</strong> of the deployment you have been editing, and make sure it '+
-       'matches the URL in this page. Then redeploy as a <strong>New version</strong>.';
+  msg+='<br>Fix: in Apps Script, <strong>Deploy → New deployment → Web app</strong> '+
+       '(Execute as <em>Me</em>, access <em>Anyone</em>), copy the Web app URL, then '+
+       '<button class="btn btn-secondary" style="padding:4px 10px;font-size:0.78rem;margin-left:4px" '+
+       'onclick="openConnModal()">paste it here ⚙</button>';
   banner.innerHTML=msg;
   banner.classList.add('visible');
   return false;
 }
 
+// ---- Connection settings ----
+function openConnModal(){
+  document.getElementById('connUrl').value=getApiUrl();
+  renderConnStatus();
+  document.getElementById('connModal').classList.add('open');
+}
+function renderConnStatus(msg,kind){
+  var el=document.getElementById('connStatus');
+  if(msg){
+    el.style.background=kind==='ok'?'#d1fae5':kind==='err'?'#fee2e2':'var(--accent-light)';
+    el.style.color=kind==='ok'?'#065f46':kind==='err'?'#b91c1c':'var(--accent)';
+    el.innerHTML=msg;return;
+  }
+  var stale=document.getElementById('staleBanner').classList.contains('visible');
+  var usingOverride=getApiUrl()!==DEFAULT_APPS_SCRIPT_URL;
+  el.style.background=stale?'#fee2e2':'#d1fae5';
+  el.style.color=stale?'#b91c1c':'#065f46';
+  el.innerHTML=(stale
+      ?'<strong>Connected to old code.</strong> This deployment does not report a version, so it predates the Team fields.'
+      :'<strong>Connected and up to date</strong> ('+esc(EXPECTED_BACKEND)+').')+
+    '<br><span style="opacity:0.8">Currently using the '+(usingOverride?'custom URL saved in this browser':'built-in default URL')+'.</span>';
+}
+async function saveConnUrl(){
+  var u=document.getElementById('connUrl').value.trim();
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec$/.test(u)){
+    renderConnStatus('That does not look like a Web app URL. It should start with '+
+      '<code>https://script.google.com/macros/s/</code> and end with <code>/exec</code>.','err');
+    return;
+  }
+  renderConnStatus('Testing connection…','info');
+  try{
+    var res=await fetch(u+'?t='+Date.now(),{cache:'no-store'});
+    var data=await res.json();
+    if(data.version!==EXPECTED_BACKEND){
+      renderConnStatus('Reached that URL, but it reports version <code>'+
+        esc(data.version||'(none)')+'</code> instead of <code>'+esc(EXPECTED_BACKEND)+
+        '</code>.<br>Paste the new code into Apps Script and deploy a <strong>New version</strong>, then try again.','err');
+      return;
+    }
+    setApiUrl(u);
+    renderConnStatus('Connected. Found '+((data.posts||[]).length)+' posts. Reloading…','ok');
+    setTimeout(async function(){
+      closeModal('connModal');
+      await loadPosts();
+      showToast('Connected to the updated Apps Script.','success');
+    },700);
+  }catch(err){
+    renderConnStatus('Could not reach that URL. Check that <em>Who has access</em> is set to '+
+      '<strong>Anyone</strong> on the deployment.','err');
+  }
+}
+function resetConnUrl(){
+  setApiUrl('');
+  document.getElementById('connUrl').value=DEFAULT_APPS_SCRIPT_URL;
+  renderConnStatus('Reset to the built-in default URL.','info');
+}
+
 async function pushPost(post){
   try{
-    var res=await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    var res=await fetch(getApiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
       redirect:'follow',body:JSON.stringify({action:'save',post:post})});
     try{
       var out=await res.json();
@@ -496,7 +604,7 @@ async function pushPost(post){
 
 async function pushDelete(id){
   try{
-    await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    await fetch(getApiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
       redirect:'follow',body:JSON.stringify({action:'delete',id:id})});
     lastSynced=new Date();updateSyncStatus();
   }catch(err){showToast('Deleted locally but could not sync.','error');}
@@ -1023,6 +1131,9 @@ document.getElementById('addModal').addEventListener('click',function(e){
 });
 document.getElementById('dayModal').addEventListener('click',function(e){
   if(e.target===this)closeModal('dayModal');
+});
+document.getElementById('connModal').addEventListener('click',function(e){
+  if(e.target===this)closeModal('connModal');
 });
 document.addEventListener('keydown',function(e){
   if(document.getElementById('addModal').classList.contains('open')||
