@@ -48,43 +48,46 @@ function respond(data) {
 // =====================================================================
 // MAIN SHEET
 // =====================================================================
-function getSheet() {
+// Returns {sheet, headers} with every SCHEMA column guaranteed to exist.
+// Writes the header row in one shot and flushes, so column indexes are
+// always valid immediately afterwards.
+function getSheetAndHeaders() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Posts');
+
   if (!sheet) {
     sheet = ss.insertSheet('Posts');
-    sheet.appendRow(SCHEMA);
-    return sheet;
+    sheet.getRange(1, 1, 1, SCHEMA.length).setValues([SCHEMA.slice()]);
+    SpreadsheetApp.flush();
+    return {sheet: sheet, headers: SCHEMA.slice()};
   }
-  ensureSchema(sheet);
-  return sheet;
+
+  // Read wide enough to catch every existing column
+  var width = Math.max(sheet.getLastColumn(), SCHEMA.length, 1);
+  var headers = sheet.getRange(1, 1, 1, width).getValues()[0]
+                  .map(function(h) { return String(h == null ? '' : h).trim(); });
+
+  // Drop trailing blanks so appended columns land in the right place
+  while (headers.length && !headers[headers.length - 1]) headers.pop();
+
+  var missing = SCHEMA.filter(function(h) { return headers.indexOf(h) < 0; });
+  if (missing.length) {
+    missing.forEach(function(h) { headers.push(h); });
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    SpreadsheetApp.flush();   // critical: makes the new columns readable now
+  }
+
+  return {sheet: sheet, headers: headers};
 }
 
-// Adds any missing columns from SCHEMA to the header row
-function ensureSchema(sheet) {
-  var lastCol = Math.max(sheet.getLastColumn(), 1);
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
-                  .map(function(h) { return String(h).trim(); });
-  var added = false;
-  SCHEMA.forEach(function(h) {
-    if (headers.indexOf(h) < 0) {
-      headers.push(h);
-      sheet.getRange(1, headers.length).setValue(h);
-      added = true;
-    }
-  });
-  return added;
-}
-
-function getHeaders(sheet) {
-  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
-    .map(function(h) { return String(h).trim(); });
-}
+// Back-compat shims
+function getSheet()          { return getSheetAndHeaders().sheet; }
+function getHeaders(sheet)   { return getSheetAndHeaders().headers; }
 
 function getAllPosts() {
-  var sheet = getSheet();
+  var sh = getSheetAndHeaders();
+  var sheet = sh.sheet, headers = sh.headers;
   if (sheet.getLastRow() < 2) return [];
-  var headers = getHeaders(sheet);
   var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
   var posts = [];
 
@@ -116,9 +119,16 @@ function getAllPosts() {
 }
 
 function upsertPost(post) {
-  var sheet   = getSheet();
-  var headers = getHeaders(sheet);
+  var sh = getSheetAndHeaders();
+  var sheet = sh.sheet, headers = sh.headers;
   function ci(key) { return headers.indexOf(key); }
+
+  // Guard: if a schema column is somehow still missing, say so rather than
+  // silently writing the row without it.
+  var absent = SCHEMA.filter(function(k) { return ci(k) < 0; });
+  if (absent.length) {
+    return {error: 'Sheet is missing columns: ' + absent.join(', ')};
+  }
 
   var values = {};
   SCHEMA.forEach(function(k) {
@@ -158,10 +168,10 @@ function upsertPost(post) {
 }
 
 function deletePost(id) {
-  var sheet = getSheet();
+  var sh = getSheetAndHeaders();
+  var sheet = sh.sheet, headers = sh.headers;
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return {error: 'Not found'};
-  var headers = getHeaders(sheet);
   var idCol = headers.indexOf('id') + 1;
   var ids = sheet.getRange(2, idCol, lastRow - 1, 1).getValues();
   for (var i = 0; i < ids.length; i++) {
@@ -318,14 +328,17 @@ function normalizeTeam(team, channel) {
     if (TEAMS[i].toLowerCase() === t.toLowerCase()) return TEAMS[i];
   }
   if (/lifecycle|life cycle|crm|lcm/i.test(t)) return 'LCM';
-  // Fall back to inferring from channel
+  // An explicit team we don't recognise is kept as-is rather than guessed away
+  if (t) return t;
+  // No team stored: infer from channel, but only when the channel says something.
+  // Returning '' beats defaulting to Paid — a wrong label is worse than none.
   var c = clean(channel).toLowerCase();
-  if (!c) return 'Paid';
+  if (!c) return '';
   if (/newsletter|email|lifecycle/.test(c)) return 'LCM';
   if (/customer story|case study/.test(c))  return 'Brand';
   if (/paid|progo|programmatic|dooh|ooh|search|direct buy|sponsor/.test(c)) return 'Paid';
   if (/linkedin|reddit|facebook|instagram|tiktok|youtube|threads|^x$|twitter/.test(c)) return 'Organic';
-  return 'Paid';
+  return '';
 }
 
 // Paid channel names
@@ -412,8 +425,8 @@ function runImport() {
 // Bulk write: builds a lookup of existing ids, updates in place or appends
 function writeRows(rows) {
   if (!rows.length) return;
-  var sheet   = getSheet();
-  var headers = getHeaders(sheet);
+  var sh = getSheetAndHeaders();
+  var sheet = sh.sheet, headers = sh.headers;
   function ci(k) { return headers.indexOf(k); }
 
   var existing = {};
@@ -624,9 +637,9 @@ function readPaid() {
 // Give any pre-existing post without a team a sensible one, inferred
 // from its channel. Run automatically by runImport().
 function backfillTeams() {
-  var sheet = getSheet();
+  var sh = getSheetAndHeaders();
+  var sheet = sh.sheet, headers = sh.headers;
   if (sheet.getLastRow() < 2) return 0;
-  var headers = getHeaders(sheet);
   var teamCol = headers.indexOf('team') + 1;
   var chCol   = headers.indexOf('channel') + 1;
   if (!teamCol || !chCol) return 0;
@@ -638,12 +651,47 @@ function backfillTeams() {
 
   for (var i = 0; i < n; i++) {
     if (!clean(teams[i][0])) {
-      teams[i][0] = normalizeTeam('', channels[i][0]);
-      changed++;
+      var inferred = normalizeTeam('', channels[i][0]);
+      if (inferred) { teams[i][0] = inferred; changed++; }
+      // No confident inference: leave blank so it can be assigned by hand
     }
   }
   if (changed) sheet.getRange(2, teamCol, n, 1).setValues(teams);
   return changed;
+}
+
+// Repair rows that were mislabeled "Paid" by the old buggy write path.
+// Imported rows get their correct team back; anything marked Paid but with
+// no channel is cleared so you can reassign it (Paid always has a channel).
+function repairTeams() {
+  var sh = getSheetAndHeaders();
+  var sheet = sh.sheet, headers = sh.headers;
+  if (sheet.getLastRow() < 2) return;
+
+  var n = sheet.getLastRow() - 1;
+  var idCol   = headers.indexOf('id') + 1;
+  var teamCol = headers.indexOf('team') + 1;
+  var chCol   = headers.indexOf('channel') + 1;
+
+  var ids      = sheet.getRange(2, idCol,   n, 1).getValues();
+  var teams    = sheet.getRange(2, teamCol, n, 1).getValues();
+  var channels = sheet.getRange(2, chCol,   n, 1).getValues();
+
+  var fixed = 0, cleared = 0;
+  for (var i = 0; i < n; i++) {
+    var id = String(ids[i][0] || '');
+    if (!id) continue;
+    if (/^org_/.test(id)  && teams[i][0] !== 'Organic') { teams[i][0] = 'Organic'; fixed++; continue; }
+    if (/^paid_/.test(id) && teams[i][0] !== 'Paid')    { teams[i][0] = 'Paid';    fixed++; continue; }
+    if (/^(org_|paid_)/.test(id)) continue;
+    if (clean(teams[i][0]) === 'Paid' && !clean(channels[i][0])) {
+      teams[i][0] = ''; cleared++;
+    }
+  }
+  sheet.getRange(2, teamCol, n, 1).setValues(teams);
+  console.log('Teams corrected: ' + fixed);
+  console.log('Teams cleared for reassignment: ' + cleared);
+  return {fixed: fixed, cleared: cleared};
 }
 
 // Preview what the import will do without writing anything
