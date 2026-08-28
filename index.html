@@ -346,7 +346,10 @@
 </div>
 
 <script>
-const DEFAULT_APPS_SCRIPT_URL='https://script.google.com/a/macros/surveymonkey.com/s/AKfycbweIsI-7YhyZ_SG3_9DlUR7aap3Jz9mEiCXSQhVq5-ZAs0ZNpePfdNbkD8Um-27d3x_/exec';
+// Use the public /macros/s/<id>/exec shape, NOT the /a/macros/<domain>/ shape.
+// The domain-scoped URL needs a signed-in Workspace session, which a
+// cross-origin fetch from the hosted page cannot provide.
+const DEFAULT_APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbweIsI-7YhyZ_SG3_9DlUR7aap3Jz9mEiCXSQhVq5-ZAs0ZNpePfdNbkD8Um-27d3x_/exec';
 // Must match BACKEND_VERSION in apps-script-code.js
 const EXPECTED_BACKEND='2026.3-teams';
 const URL_KEY='mkCalApiUrl';
@@ -361,6 +364,16 @@ const YEAR=2026;
 const WEBAPP_URL_RE=/^https:\/\/script\.google\.com\/(?:a\/macros\/[^\/]+|macros)\/s\/[^\/]+\/(?:exec|dev)(?:\?.*)?$/;
 
 function isWebAppUrl(u){return WEBAPP_URL_RE.test(String(u||'').trim());}
+
+// Converts between the two Apps Script URL shapes for the same deployment:
+//   /a/macros/<domain>/s/<id>/exec  <->  /macros/s/<id>/exec
+// The second is publicly fetchable; the first requires a Workspace session.
+function alternateUrlShape(u){
+  u=String(u||'').trim().split('?')[0];
+  var m=u.match(/^https:\/\/script\.google\.com\/a\/macros\/[^\/]+\/s\/([^\/]+)\/(exec|dev)$/);
+  if(m)return'https://script.google.com/macros/s/'+m[1]+'/'+m[2];
+  return null;
+}
 
 function getApiUrl(){
   try{
@@ -630,7 +643,31 @@ async function runDiagnostics(){
     if(data.schema)log('     ok    schema has team: '+(data.schema.indexOf('team')>=0));
   }catch(err){
     log('     FAIL  '+err.message);
-    log('  => Network or CORS failure reaching the deployment.');
+    log('');
+    // The /a/macros/<domain>/ URL needs a signed-in session that a
+    // cross-origin fetch cannot supply. Try the public shape automatically.
+    var alt=alternateUrlShape(url);
+    if(alt){
+      log('     Trying the alternate URL shape…');
+      log('     '+alt);
+      try{
+        var res3=await fetch(alt+'?t='+Date.now(),{cache:'no-store'});
+        var t3=await res3.text();
+        var d3=null;try{d3=JSON.parse(t3);}catch(e){}
+        if(d3){
+          log('     ok    That URL works (version='+(d3.version||'(none)')+
+              ', posts='+((d3.posts||[]).length)+')');
+          log('');
+          log('  => Use the alternate URL above. Paste it in the box and');
+          log('     press Test & Save.');
+          document.getElementById('connUrl').value=alt;
+          return;
+        }
+        log('     FAIL  Alternate URL also did not return JSON.');
+      }catch(e2){log('     FAIL  Alternate URL also failed: '+e2.message);}
+    }
+    log('  => Network, CORS, or access failure reaching the deployment.');
+    log('     Set "Who has access" to Anyone on the deployment.');
     return;
   }
 
