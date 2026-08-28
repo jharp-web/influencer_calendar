@@ -318,9 +318,12 @@
         then <strong>Deploy</strong> and copy the Web app URL here. It must end in <code>/exec</code>.
       </div>
     </div>
+      <div id="diagOut" style="display:none;margin-top:14px;font-family:ui-monospace,Menlo,monospace;font-size:0.73rem;background:#1a1814;color:#e8e5e0;padding:12px;border-radius:7px;white-space:pre-wrap;line-height:1.55;max-height:260px;overflow-y:auto"></div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="resetConnUrl()">Reset to default</button>
       <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn btn-secondary" onclick="runDiagnostics()">Run diagnostics</button>
         <button class="btn btn-secondary" onclick="closeModal('connModal')">Cancel</button>
         <button class="btn btn-primary" onclick="saveConnUrl()">Test &amp; Save</button>
       </div>
@@ -343,7 +346,7 @@
 </div>
 
 <script>
-const DEFAULT_APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycby-K4snEnkdMp6objKzxp2gmDfDcxVVW4fQYKUHKGaSrsbJzSRFZPursqzqO5-0YA5-/exec';
+const DEFAULT_APPS_SCRIPT_URL='https://script.google.com/a/macros/surveymonkey.com/s/AKfycbweIsI-7YhyZ_SG3_9DlUR7aap3Jz9mEiCXSQhVq5-ZAs0ZNpePfdNbkD8Um-27d3x_/exec';
 // Must match BACKEND_VERSION in apps-script-code.js
 const EXPECTED_BACKEND='2026.3-teams';
 const URL_KEY='mkCalApiUrl';
@@ -351,10 +354,18 @@ const YEAR=2026;
 
 // The deployment URL can be overridden in the ⚙ dialog and is remembered
 // in this browser, so a redeploy doesn't require editing the file.
+// Accepts both URL shapes Apps Script hands out:
+//   personal : https://script.google.com/macros/s/<ID>/exec
+//   Workspace: https://script.google.com/a/macros/<domain>/s/<ID>/exec
+// and tolerates the /dev test URL plus any query string.
+const WEBAPP_URL_RE=/^https:\/\/script\.google\.com\/(?:a\/macros\/[^\/]+|macros)\/s\/[^\/]+\/(?:exec|dev)(?:\?.*)?$/;
+
+function isWebAppUrl(u){return WEBAPP_URL_RE.test(String(u||'').trim());}
+
 function getApiUrl(){
   try{
     var u=localStorage.getItem(URL_KEY);
-    if(u&&/^https:\/\/script\.google\.com\/.+\/exec$/.test(u))return u;
+    if(u&&isWebAppUrl(u))return u;
   }catch(e){}
   return DEFAULT_APPS_SCRIPT_URL;
 }
@@ -556,10 +567,11 @@ function renderConnStatus(msg,kind){
     '<br><span style="opacity:0.8">Currently using the '+(usingOverride?'custom URL saved in this browser':'built-in default URL')+'.</span>';
 }
 async function saveConnUrl(){
-  var u=document.getElementById('connUrl').value.trim();
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec$/.test(u)){
-    renderConnStatus('That does not look like a Web app URL. It should start with '+
-      '<code>https://script.google.com/macros/s/</code> and end with <code>/exec</code>.','err');
+  var u=document.getElementById('connUrl').value.trim().replace(/[<>"']/g,'');
+  if(!isWebAppUrl(u)){
+    renderConnStatus('That does not look like a Web app URL. It should look like '+
+      '<code>https://script.google.com/macros/s/&lt;id&gt;/exec</code> or '+
+      '<code>https://script.google.com/a/macros/&lt;domain&gt;/s/&lt;id&gt;/exec</code>.','err');
     return;
   }
   renderConnStatus('Testing connection…','info');
@@ -584,6 +596,116 @@ async function saveConnUrl(){
       '<strong>Anyone</strong> on the deployment.','err');
   }
 }
+// Full round-trip self-test: read, write, verify, clean up.
+// Pinpoints exactly which step fails instead of guessing.
+async function runDiagnostics(){
+  var out=document.getElementById('diagOut');
+  out.style.display='block';
+  var lines=[];
+  function log(s){lines.push(s);out.textContent=lines.join('\n');}
+  var url=document.getElementById('connUrl').value.trim()||getApiUrl();
+
+  log('URL  '+url);
+  log('PAGE '+location.origin);
+  log('EXPECTED VERSION '+EXPECTED_BACKEND);
+  log('');
+
+  // 1. READ
+  log('1/4  Reading…');
+  var data=null;
+  try{
+    var res=await fetch(url+'?t='+Date.now(),{cache:'no-store'});
+    var text=await res.text();
+    try{data=JSON.parse(text);}catch(e){
+      log('     FAIL  Not JSON (HTTP '+res.status+'). First 120 chars:');
+      log('     '+text.slice(0,120).replace(/\s+/g,' '));
+      log('');
+      log('  => The deployment is not publicly readable. In Apps Script:');
+      log('     Deploy > Manage deployments > pencil > Who has access = Anyone');
+      return;
+    }
+    log('     ok    HTTP '+res.status+', version='+(data.version||'(none)')+
+        ', posts='+((data.posts||[]).length));
+    if(data.error)log('     warn  backend error: '+data.error);
+    if(data.schema)log('     ok    schema has team: '+(data.schema.indexOf('team')>=0));
+  }catch(err){
+    log('     FAIL  '+err.message);
+    log('  => Network or CORS failure reaching the deployment.');
+    return;
+  }
+
+  if(data.version!==EXPECTED_BACKEND){
+    log('');
+    log('  => STOP: deployment runs old code ('+(data.version||'no version')+').');
+    log('     Paste apps-script-code.js, run checkVersion, then');
+    log('     Deploy > Manage deployments > pencil > New version.');
+    return;
+  }
+
+  // 2. WRITE
+  log('');
+  log('2/4  Writing a test post (team=LCM)…');
+  var testId='diagtest_'+Date.now();
+  var probe={id:testId,team:'LCM',date:'2026-01-02',endDate:'',channel:'',
+    platforms:[],postType:'',influencer:'DIAGNOSTIC',
+    title:'Connection test — safe to delete',notes:'',status:'Planned',
+    funnel:'',format:'',audience:[],evergreen:false,source:'diagnostic'};
+  try{
+    var wr=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      redirect:'follow',body:JSON.stringify({action:'save',post:probe})});
+    var wtext=await wr.text();
+    var wout=null;try{wout=JSON.parse(wtext);}catch(e){}
+    if(!wout){
+      log('     FAIL  Write returned non-JSON (HTTP '+wr.status+'):');
+      log('     '+wtext.slice(0,120).replace(/\s+/g,' '));
+      log('');
+      log('  => Writes are being blocked. Usually "Who has access" is not Anyone,');
+      log('     or the deployment requires a org sign-in that fetch cannot supply.');
+      return;
+    }
+    if(wout.error){log('     FAIL  backend said: '+wout.error);return;}
+    log('     ok    '+JSON.stringify(wout));
+  }catch(err){log('     FAIL  '+err.message);return;}
+
+  // 3. VERIFY
+  log('');
+  log('3/4  Re-reading to verify the team persisted…');
+  var found=null;
+  try{
+    var res2=await fetch(url+'?t='+Date.now(),{cache:'no-store'});
+    var d2=await res2.json();
+    found=(d2.posts||[]).filter(function(p){return p.id===testId;})[0];
+  }catch(err){log('     FAIL  '+err.message);return;}
+
+  if(!found){
+    log('     FAIL  Test post not in the sheet. The write silently did nothing.');
+    log('  => The deployment is probably bound to a different spreadsheet');
+    log('     than the one you are looking at.');
+    return;
+  }
+  log('     team returned = "'+(found.team||'(blank)')+'"  (expected "LCM")');
+  var teamOk=found.team==='LCM';
+  log(teamOk?'     ok    TEAM PERSISTED CORRECTLY':'     FAIL  TEAM WAS LOST OR CHANGED');
+
+  // 4. CLEANUP
+  log('');
+  log('4/4  Deleting the test post…');
+  try{
+    await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      redirect:'follow',body:JSON.stringify({action:'delete',id:testId})});
+    log('     ok    removed');
+  }catch(err){log('     warn  could not delete — remove '+testId+' from the sheet by hand');}
+
+  log('');
+  log(teamOk?'RESULT: everything works. Teams save correctly.'
+           :'RESULT: read+write work, but team is being dropped on write.');
+  if(!teamOk){
+    log('  => The Posts sheet has no "team" column, or a duplicate/renamed');
+    log('     header is shadowing it. Check row 1 of the Posts tab.');
+  }
+  await loadPosts(true);
+}
+
 function resetConnUrl(){
   setApiUrl('');
   document.getElementById('connUrl').value=DEFAULT_APPS_SCRIPT_URL;
@@ -594,10 +716,19 @@ async function pushPost(post){
   try{
     var res=await fetch(getApiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
       redirect:'follow',body:JSON.stringify({action:'save',post:post})});
-    try{
-      var out=await res.json();
-      if(out&&out.error){showToast('Sheets rejected the save: '+out.error,'error');return false;}
-    }catch(e){/* non-JSON response is fine */}
+    var text=await res.text();
+    var out=null;
+    try{out=JSON.parse(text);}catch(e){}
+    if(!out){
+      // Apps Script returned HTML (usually a sign-in page) rather than JSON —
+      // the write did not happen. Do not report success.
+      var looksLikeLogin=/<html|accounts\.google\.com|sign in/i.test(text);
+      showToast(looksLikeLogin
+        ? 'The deployment is not publicly accessible, so the save was blocked. Set "Who has access" to Anyone.'
+        : 'Sheets returned an unexpected response, so the save may not have applied.','error');
+      return false;
+    }
+    if(out.error){showToast('Sheets rejected the save: '+out.error,'error');return false;}
     lastSynced=new Date();updateSyncStatus();return true;
   }catch(err){showToast('Could not sync to Google Sheets.','error');return false;}
 }
@@ -1110,7 +1241,20 @@ async function savePost(){
 
   setSyncing(true);
   var ok=await pushPost(postObj);
-  if(ok)await loadPosts(true);
+  if(ok){
+    await loadPosts(true);
+    // Confirm the round trip: if the team came back different, the backend
+    // dropped it rather than saving it. Say so instead of silently reverting.
+    var saved=posts.find(function(p){return p.id===id;});
+    if(!saved){
+      showToast('The post was not found in Sheets after saving. Check the ⚙ connection.','error');
+      posts.push(postObj);renderAll();
+    }else if(saved.team!==postObj.team){
+      showToast('Sheets saved the post but changed Team from '+postObj.team+' to '+
+                (saved.team||'(blank)')+'. The deployment is running old code — run '+
+                'checkVersion in Apps Script.','error');
+    }
+  }
   setSyncing(false);
 }
 
