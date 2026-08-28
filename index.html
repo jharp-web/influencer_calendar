@@ -139,6 +139,9 @@
   .modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;position:sticky;bottom:0;background:var(--surface);}
   .cond-fields{display:none;}
   .cond-fields.visible{display:block;}
+  .stale-banner{display:none;background:#fee2e2;color:#7f1d1d;border-bottom:2px solid #dc2626;padding:11px 24px;font-size:0.83rem;line-height:1.5;flex-shrink:0;}
+  .stale-banner.visible{display:block;}
+  .stale-banner code{background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-size:0.94em;}
   .no-team-msg{font-size:0.83rem;color:var(--text-muted);padding:10px 0 4px;}
 </style>
 </head>
@@ -166,6 +169,8 @@
     <button class="btn btn-primary" onclick="openAddModal()">+ Add Post</button>
   </div>
 </header>
+
+<div class="stale-banner" id="staleBanner"></div>
 
 <div class="filter-bar">
   <span class="filter-label">Teams</span>
@@ -306,6 +311,8 @@
 
 <script>
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycby-K4snEnkdMp6objKzxp2gmDfDcxVVW4fQYKUHKGaSrsbJzSRFZPursqzqO5-0YA5-/exec';
+// Must match BACKEND_VERSION in apps-script-code.js
+const EXPECTED_BACKEND='2026.3-teams';
 const YEAR=2026;
 
 const TEAMS=['Paid','Organic','LCM','Brand'];
@@ -436,9 +443,10 @@ async function loadPosts(silent){
   if(!silent)document.getElementById('loadingOverlay').classList.remove('hidden');
   setSyncing(true);
   try{
-    const res=await fetch(APPS_SCRIPT_URL);
+    const res=await fetch(APPS_SCRIPT_URL+'?t='+Date.now(),{cache:'no-store'});
     const data=await res.json();
     if(data.error)throw new Error(data.error);
+    checkBackendVersion(data);
     posts=(data.posts||[]).map(migratePost).filter(function(p){return p.id&&p.date;});
     lastSynced=new Date();updateSyncStatus();renderAll();return true;
   }catch(err){
@@ -448,6 +456,30 @@ async function loadPosts(silent){
     setSyncing(false);
     if(!silent)document.getElementById('loadingOverlay').classList.add('hidden');
   }
+}
+
+// Detects when the calendar is pointed at an out-of-date Apps Script
+// deployment — the situation where saves appear to work but silently
+// drop team, post type and platforms.
+function checkBackendVersion(data){
+  var banner=document.getElementById('staleBanner');
+  var v=data.version||'';
+  if(v===EXPECTED_BACKEND){banner.classList.remove('visible');return true;}
+  var msg;
+  if(!v){
+    msg='<strong>⚠️ This calendar is connected to an old Apps Script deployment.</strong> '+
+        'Saves will lose Team, Post Type and Platform. The deployment at this URL is running '+
+        'code from before the team fields existed.';
+  }else{
+    msg='<strong>⚠️ Backend version mismatch.</strong> This page expects <code>'+esc(EXPECTED_BACKEND)+
+        '</code> but the deployment reports <code>'+esc(v)+'</code>.';
+  }
+  msg+='<br>Fix: in Apps Script go to <strong>Deploy → Manage deployments</strong>, copy the '+
+       '<strong>Web app URL</strong> of the deployment you have been editing, and make sure it '+
+       'matches the URL in this page. Then redeploy as a <strong>New version</strong>.';
+  banner.innerHTML=msg;
+  banner.classList.add('visible');
+  return false;
 }
 
 async function pushPost(post){
@@ -930,6 +962,10 @@ async function savePost(){
   if(endDate&&endDate<date){showToast('End Date must be on or after Start Date.','error');return;}
   if((selectedTeam==='Paid'||selectedTeam==='Organic')&&!channel){
     showToast('Please pick a channel.','error');return;
+  }
+  if(document.getElementById('staleBanner').classList.contains('visible')){
+    if(!confirm('The Apps Script deployment is out of date, so Team, Post Type and Platform '+
+                'will not be saved.\n\nSave anyway?'))return;
   }
 
   var id=currentEditId||uid();
